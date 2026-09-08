@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Image Layer Composer</title>
+<style>
+  :root{
+    --bg:#f1f5f9;
+    --panel:#ffffff;
+    --sub:#f8fafc;
+    --item:#eef2f6;
+    --line:#cbd5e1;
+    --text:#0f172a;
+    --muted:#64748b;
+    --accent:#0284c7;
+    --accent-hover:#0369a1;
+    --danger:#fee2e2;
+    --danger-text:#b91c1c;
+    --shadow:0 8px 28px rgba(15,23,42,.08);
+  }
+  *{box-sizing:border-box}
+  html,body{min-height:100%;margin:0}
+  body{
+    font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;
+    background:var(--bg); color:var(--text);
+  }
+  body,button,input,select{font:inherit}
+  button{cursor:pointer;border:0;border-radius:8px;padding:8px 12px;background:#e2e8f0;color:#0f172a;font-size:13px;font-weight:700;white-space:nowrap}
+  button:hover:not(:disabled){background:#cbd5e1}
+  button:active:not(:disabled){transform:scale(.98)}
+  button.primary{background:var(--accent);color:#fff}
+  button.primary:hover:not(:disabled){background:var(--accent-hover)}
+  button.danger{background:var(--danger);color:var(--danger-text)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  input[type=text],input[type=number],input[type=file],select{
+    width:100%;padding:8px 10px;font-size:13px;color:var(--text);background:#fff;border:1px solid var(--line);border-radius:8px;min-width:0;
+  }
+  input[type=file]{padding:7px 8px}
+  input[type=range]{width:100%;accent-color:var(--accent);min-width:0}
+  input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{cursor:pointer;opacity:.7}
+  input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(2,132,199,.12)}
+  label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin:0 0 5px}
+  h1,h2,p{margin:0}
+  .container{max-width:1500px;width:100%;margin:0 auto;padding:18px}
+  .header-area{display:flex;justify-content:space-between;align-items:center;gap:14px;border-bottom:2px solid var(--line);padding-bottom:12px;margin-bottom:12px}
+  .header-left{display:flex;align-items:center;gap:14px;min-width:0}
+  .header-left h1{font-size:20px;white-space:nowrap}
+  .custom-title-group{display:flex;align-items:center;gap:7px;min-width:0}
+  .custom-title-group label{white-space:nowrap;margin:0}
+  #customTitleInput{width:min(320px,35vw);min-width:150px}
+  .header-actions{display:flex;align-items:center;gap:7px;justify-content:flex-end;flex-wrap:wrap}
+  .control-group{display:flex;flex-direction:column;gap:10px;margin-bottom:14px}
+  .control-row{display:flex;align-items:flex-end;gap:10px;width:100%;flex-wrap:wrap}
+  .control-block{min-width:0}
+  .control-block.ratio{flex:0 0 170px}
+  .control-block.size{flex:0 0 135px}
+  .control-block.apply{flex:0 0 auto}
+  .resolution-row{display:flex;align-items:flex-end;gap:8px;flex:1 1 320px;min-width:280px}
+  .resolution-row button{white-space:nowrap}
+  .resolution-label{display:flex;align-items:center;justify-content:center;min-width:175px;min-height:35px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;font-weight:800;font-size:12px;font-variant-numeric:tabular-nums}
+  .asset-grid{display:grid;grid-template-columns:1.2fr 1fr auto;gap:10px;align-items:end}
+  .animation-row{display:flex;align-items:flex-end;gap:8px;width:100%;flex-wrap:wrap}
+  .animation-row .speed-block{display:flex;align-items:flex-end;gap:8px;flex:1 1 320px;min-width:260px}
+  .animation-row .speed-number{flex:0 0 88px}
+  .animation-row .speed-range{flex:1 1 180px;margin-bottom:7px}
+  .tip{font-size:11px;line-height:1.55;color:var(--muted)}
+  .layout-grid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(380px,.95fr);gap:14px;align-items:stretch}
+  .window{min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);overflow:hidden}
+  .window-header{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line);background:#fff}
+  .window-title{font-size:14px;font-weight:900;white-space:nowrap}
+  .window-actions{display:flex;align-items:center;gap:6px;min-width:0;overflow-x:auto;white-space:nowrap}
+  .window-actions > *{flex:0 0 auto}
+  .zoom-controls{display:flex;align-items:center;gap:6px}
+  .zoom-controls .unit-input{width:76px;flex:0 0 76px}
+  .zoom-controls input[type=range]{width:150px;flex:0 1 150px}
+  .unit-input{position:relative;width:100%}
+  .unit-input input{padding-right:28px}
+  .unit-input .unit{position:absolute;right:9px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:12px;pointer-events:none;line-height:1}
+  .window-hint{font-size:11px;color:var(--muted);margin-left:auto}
+  .stage-area{min-height:calc(100vh - 260px);max-height:calc(100vh - 130px);display:grid;place-items:start center;align-content:start;overflow:auto;padding:10px 14px 20px;background:#fafbfc;border-radius:0 0 12px 12px}
+  #canvas{display:block;flex:0 0 auto;max-width:none;max-height:none;width:960px;height:540px;border:1px solid #cbd5e1;border-radius:8px;background:linear-gradient(45deg,#eee 25%,transparent 25%),linear-gradient(-45deg,#eee 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#eee 75%),linear-gradient(-45deg,transparent 75%,#eee 75%);background-size:24px 24px;background-position:0 0,0 12px,12px -12px,-12px 0;box-shadow:0 8px 24px rgba(0,0,0,.06);touch-action:none}
+  .editor-window{display:flex;flex-direction:column;min-height:0}
+  .editor-content{padding:12px;overflow:auto;max-height:calc(100vh - 130px)}
+  .card{border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px;background:#fff}
+  .card:last-child{margin-bottom:0}
+  .card h2{font-size:13px;margin-bottom:9px}
+  .editor-card-header{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .btn-row{display:flex;gap:7px;flex-wrap:wrap}
+  .layer-list{display:grid;gap:7px;max-height:320px;overflow:auto;padding-right:1px}
+  .layer{display:grid;grid-template-columns:28px minmax(0,1fr) auto;align-items:center;gap:8px;padding:8px;border:1px solid var(--line);border-radius:9px;cursor:pointer;background:#fff}
+  .layer:hover{background:var(--sub)}
+  .layer.active{border-color:var(--accent);box-shadow:0 0 0 2px rgba(2,132,199,.12);background:#f0f9ff}
+  .badge{width:24px;height:24px;display:grid;place-items:center;border-radius:6px;background:#e2e8f0;font-size:11px;font-weight:800}
+  .layer-info{min-width:0}
+  .layer-name{font-size:13px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .layer-state{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .layer-actions{display:flex;align-items:center;gap:4px}
+  .layer-actions button{padding:5px 7px;font-size:11px}
+  .layer-empty{padding:12px;border:1px dashed var(--line);border-radius:8px;color:var(--muted);font-size:12px;line-height:1.6}
+  .selected-layer-title{font-size:12px;color:var(--accent);font-weight:900;margin-bottom:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .controls{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+  .control-wide{grid-column:1 / -1}
+  .range-with-number{display:grid;grid-template-columns:minmax(84px,98px) minmax(0,1fr);gap:9px;align-items:center}
+  .custom-size-block{margin-top:2px;padding-top:10px;border-top:1px dashed var(--line)}
+  .custom-size-title{font-size:11px;font-weight:900;color:var(--muted);margin-bottom:7px}
+  .custom-size-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+  .edit-actions{margin-top:9px}
+  .footer-actions{display:flex;gap:7px}
+  .footer-actions button{flex:1}
+  .status-line{min-height:18px}
+  .no-wrap{white-space:nowrap}
+  @media(max-width:1100px){
+    .header-area{align-items:flex-start}
+    .header-left{flex-direction:column;align-items:flex-start;gap:7px}
+    #customTitleInput{width:min(320px,45vw)}
+    .layout-grid{grid-template-columns:minmax(0,1.2fr) minmax(320px,1fr)}
+    .asset-grid{grid-template-columns:1fr 1fr}
+    .asset-grid > :last-child{grid-column:1 / -1}
+  }
+  @media(max-width:900px){
+    .layout-grid{grid-template-columns:1fr}
+    .stage-area{min-height:60vh;max-height:none}
+    .editor-content{max-height:none}
+  }
+  @media(max-width:650px){
+    .container{padding:10px}
+    .header-area{flex-direction:column;align-items:stretch}
+    .header-left{width:100%}
+    #customTitleInput{width:100%;min-width:0}
+    .header-actions{width:100%;justify-content:stretch}
+    .header-actions button{flex:1}
+    .control-row{display:grid;grid-template-columns:1fr 1fr}
+    .control-block.ratio{grid-column:1 / -1;width:100%}
+    .control-block.size{width:100%}
+    .control-block.apply{grid-column:1 / -1;width:100%}
+    .resolution-row{grid-column:1 / -1;min-width:0;width:100%;display:grid;grid-template-columns:1fr 1.2fr 1fr}
+    .resolution-label{min-width:0}
+    .asset-grid{grid-template-columns:1fr}
+    .asset-grid > :last-child{grid-column:auto}
+    .animation-row{align-items:stretch}
+    .animation-row .speed-block{flex-direction:row;align-items:flex-end;min-width:0;width:100%}
+    .window-header{align-items:flex-start;flex-direction:column}
+    .window-actions{width:100%;max-width:100%;overflow-x:auto}
+    .window-hint{width:100%;margin-left:0}
+    .controls{grid-template-columns:1fr}
+    .control-wide{grid-column:span 1}
+    .range-with-number{grid-template-columns:96px minmax(0,1fr)}
+  }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js"></script>
+</head>
+<body>
+<div class="container">
+  <header class="header-area">
+    <div class="header-left">
+      <h1>Image Layer Composer</h1>
+      <div class="custom-title-group">
+        <label for="customTitleInput">編集名：</label>
+        <input id="customTitleInput" type="text" placeholder="ブラウザのタブ名を変更">
+      </div>
+    </div>
+    <div class="header-actions">
+      <button id="download" class="primary" disabled>PNGを書き出す</button>
+      <button id="downloadGif" disabled>GIFを書き出す</button>
+      <span id="exportStatus" class="tip status-line"></span>
+    </div>
+  </header>
+
+  <section class="control-group" aria-label="共通設定">
+    <div class="control-row">
+      <div class="control-block ratio">
+        <label for="canvasPreset">キャンバスサイズ</label>
+        <select id="canvasPreset">
+          <option value="16:9">16:9</option>
+          <option value="9:16">9:16</option>
+          <option value="1:1">1:1</option>
+          <option value="3:4">3:4</option>
+          <option value="4:3">4:3</option>
+          <option value="4:5">4:5</option>
+          <option value="10:7">10:7</option>
+          <option value="custom">カスタム</option>
+        </select>
+      </div>
+      <div class="control-block size">
+        <label for="canvasWidth">幅（px）</label>
+        <input id="canvasWidth" type="number" min="1" max="12000" value="1920">
+      </div>
+      <div class="control-block size">
+        <label for="canvasHeight">高さ（px）</label>
+        <input id="canvasHeight" type="number" min="1" max="12000" value="1080">
+      </div>
+      <div class="control-block apply">
+        <label>&nbsp;</label>
+        <button id="applyCanvas" class="primary">キャンバスを適用</button>
+      </div>
+      <div class="resolution-row">
+        <button id="resolutionDown" type="button">画素を下降</button>
+        <div id="resolutionLabel" class="resolution-label">FHD 1920 × 1080</div>
+        <button id="resolutionUp" type="button">画素を上昇</button>
+      </div>
+    </div>
+
+    <div class="asset-grid">
+      <div>
+        <label for="assetFile">素材ファイル（画像 / GIF・複数選択可）</label>
+        <input id="assetFile" type="file" accept="image/*,.gif" multiple>
+      </div>
+      <div>
+        <label for="assetPoolSelect">ロード済み素材</label>
+        <select id="assetPoolSelect"><option value="" selected disabled>-- 素材を読み込んでください --</option></select>
+      </div>
+      <div>
+        <label>&nbsp;</label>
+        <button id="addAssetLayer" class="primary" disabled>選択素材をレイヤーへ追加</button>
+      </div>
+    </div>
+
+    <div class="animation-row">
+      <button id="gifPlay" class="primary">再生中</button>
+      <button id="gifToStart">先頭へ</button>
+      <div class="speed-block">
+        <label class="no-wrap" for="gifSpeedNumber">再生速度</label>
+        <div class="unit-input speed-number">
+          <input id="gifSpeedNumber" type="number" min="1" max="1000" step="1" value="100" aria-label="再生速度を数値入力">
+          <span class="unit">%</span>
+        </div>
+        <input id="gifSpeed" class="speed-range" type="range" min="25" max="200" step="1" value="100" aria-label="再生速度スライダー">
+      </div>
+      <span id="gifStatus" class="tip status-line">静止画を読み込むとレイヤーとして追加できます。GIFはアニメーションとして読み込みます。</span>
+    </div>
+    <p class="tip">キャンバス比率は8種類。初期値は16:9のFHD（1920 × 1080）。画素の上昇・下降で標準解像度を切り替え、カスタムでは幅・高さを直接指定できます。</p>
+  </section>
+
+  <div class="layout-grid">
+    <main class="preview-section window" aria-label="プレビュー画面">
+      <div class="window-header">
+        <div class="window-title">プレビュー画面</div>
+        <div class="window-actions">
+          <span class="no-wrap" style="font-size:12px;color:var(--muted);font-weight:700">ズーム</span>
+          <button id="zoomOut" aria-label="ズームアウト">−</button>
+          <div class="zoom-controls">
+            <div class="unit-input">
+              <input id="zoomNumber" type="number" min="5" max="100" step="1" value="100" aria-label="ズーム倍率を数値入力">
+              <span class="unit">%</span>
+            </div>
+            <input id="zoomRange" type="range" min="5" max="100" step="1" value="100" aria-label="ズーム倍率スライダー">
+          </div>
+          <button id="zoomIn" aria-label="ズームイン">＋</button>
+          <span class="window-hint">上が前面、下が背面。キャンバス上で選択レイヤーをドラッグできます。</span>
+        </div>
+      </div>
+      <div class="stage-area" id="stageArea">
+        <canvas id="canvas" width="1920" height="1080"></canvas>
+      </div>
+    </main>
+
+    <aside class="editor-section window editor-window" aria-label="編集画面">
+      <div class="window-header">
+        <div class="window-title">編集画面</div>
+        <span class="tip">レイヤーと選択画像の調整</span>
+      </div>
+      <div class="editor-content">
+        <section class="card">
+          <div class="editor-card-header">
+            <h2>レイヤー</h2>
+            <span id="layerStatus" class="tip">0 レイヤー</span>
+          </div>
+          <div class="btn-row" style="margin:8px 0">
+            <button id="addLayerBtn" class="primary">＋ レイヤーを追加</button>
+            <button id="layerUpBtn">↑ 上へ</button>
+            <button id="layerDownBtn">↓ 下へ</button>
+          </div>
+          <div id="layerList" class="layer-list"></div>
+        </section>
+
+        <section class="card">
+          <h2>選択画像の調整</h2>
+          <div id="selectedLayerTitle" class="selected-layer-title">選択なし</div>
+          <div class="controls">
+            <div><label for="x">X</label><input id="x" type="number" step="1"></div>
+            <div><label for="y">Y</label><input id="y" type="number" step="1"></div>
+            <div class="control-wide">
+              <label>ズーム</label>
+              <div class="range-with-number">
+                <div class="unit-input"><input id="layerZoomNumber" type="number" min="5" max="1000" step="1" value="100"><span class="unit">%</span></div>
+                <input id="layerZoom" type="range" min="5" max="400" step="1" value="100" aria-label="選択レイヤーのズームスライダー">
+              </div>
+            </div>
+            <div class="control-wide">
+              <label>回転</label>
+              <div class="range-with-number">
+                <div class="unit-input"><input id="rotNumber" type="number" min="-3600" max="3600" step="1" value="0"><span class="unit">°</span></div>
+                <input id="rot" type="range" min="-180" max="180" step="1" value="0" aria-label="回転スライダー">
+              </div>
+            </div>
+            <div class="control-wide">
+              <label for="opacityNumber">不透明度</label>
+              <div class="range-with-number">
+                <div class="unit-input"><input id="opacityNumber" type="number" min="0" max="100" step="1" value="100"><span class="unit">%</span></div>
+                <input id="opacity" type="range" min="0" max="100" step="1" value="100">
+              </div>
+            </div>
+            <div><button id="fit" class="primary" style="width:100%">画面に合わせる</button></div>
+            <div><button id="center" style="width:100%">中央に配置</button></div>
+            <div class="control-wide custom-size-block">
+              <div class="custom-size-title">カスタムサイズ</div>
+              <div class="custom-size-grid">
+                <div><label for="w">幅（px）</label><input id="w" type="number" min="1" step="1"></div>
+                <div><label for="h">高さ（px）</label><input id="h" type="number" min="1" step="1"></div>
+              </div>
+            </div>
+          </div>
+          <div class="btn-row edit-actions">
+            <button id="duplicateLayerBtn" style="flex:1">選択レイヤーを複製</button>
+            <button id="deleteLayerBtn" class="danger" style="flex:1">選択レイヤーを削除</button>
+          </div>
+          <p class="tip" style="margin-top:9px">回転と不透明度は、スライダー外の値も数値入力で直接指定できます。</p>
+        </section>
+
+        <section class="card">
+          <h2>その他</h2>
+          <div class="footer-actions">
+            <button id="reset" class="danger">すべてリセット</button>
+          </div>
+        </section>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+if (!ctx) throw new Error('Canvas 2Dコンテキストを初期化できませんでした。');
+
+const els = {
+  customTitleInput: document.getElementById('customTitleInput'),
+  download: document.getElementById('download'),
+  downloadGif: document.getElementById('downloadGif'),
+  exportStatus: document.getElementById('exportStatus'),
+  canvasPreset: document.getElementById('canvasPreset'),
+  canvasWidth: document.getElementById('canvasWidth'),
+  canvasHeight: document.getElementById('canvasHeight'),
+  applyCanvas: document.getElementById('applyCanvas'),
+  resolutionDown: document.getElementById('resolutionDown'),
+  resolutionUp: document.getElementById('resolutionUp'),
+  resolutionLabel: document.getElementById('resolutionLabel'),
+  assetFile: document.getElementById('assetFile'),
+  assetPoolSelect: document.getElementById('assetPoolSelect'),
+  addAssetLayer: document.getElementById('addAssetLayer'),
+  gifPlay: document.getElementById('gifPlay'),
+  gifToStart: document.getElementById('gifToStart'),
+  gifSpeed: document.getElementById('gifSpeed'),
+  gifSpeedNumber: document.getElementById('gifSpeedNumber'),
+  gifStatus: document.getElementById('gifStatus'),
+  zoomOut: document.getElementById('zoomOut'),
+  zoomIn: document.getElementById('zoomIn'),
+  zoomNumber: document.getElementById('zoomNumber'),
+  zoomRange: document.getElementById('zoomRange'),
+  layerStatus: document.getElementById('layerStatus'),
+  layerList: document.getElementById('layerList'),
+  addLayerBtn: document.getElementById('addLayerBtn'),
+  layerUpBtn: document.getElementById('layerUpBtn'),
+  layerDownBtn: document.getElementById('layerDownBtn'),
+  selectedLayerTitle: document.getElementById('selectedLayerTitle'),
+  x: document.getElementById('x'),
+  y: document.getElementById('y'),
+  w: document.getElementById('w'),
+  h: document.getElementById('h'),
+  rot: document.getElementById('rot'),
+  rotNumber: document.getElementById('rotNumber'),
+  layerZoom: document.getElementById('layerZoom'),
+  layerZoomNumber: document.getElementById('layerZoomNumber'),
+  opacity: document.getElementById('opacity'),
+  opacityNumber: document.getElementById('opacityNumber'),
+  fit: document.getElementById('fit'),
+  center: document.getElementById('center'),
+  duplicateLayerBtn: document.getElementById('duplicateLayerBtn'),
+  deleteLayerBtn: document.getElementById('deleteLayerBtn'),
+  reset: document.getElementById('reset')
+};
+
+const RATIO_DEFINITIONS = {
+  '16:9':[16,9], '9:16':[9,16], '1:1':[1,1], '3:4':[3,4],
+  '4:3':[4,3], '4:5':[4,5], '10:7':[10,7]
+};
+const RESOLUTION_TIERS = [
+  {key:'SD', pixels:480},
+  {key:'HD', pixels:720},
+  {key:'FHD', pixels:1080},
+  {key:'4K', pixels:2160}
+];
+
+let assetPool = [];
+let layers = [];
+let selectedLayerId = null;
+let nextLayerId = 1;
+let nextAssetId = 1;
+let drag = null;
+let zoom = 1;
+let animationPlaying = true;
+let animationSpeed = 1;
+let animationTime = 0;
+let lastAnimationTimestamp = performance.now();
+let resolutionTierIndex = 2;
+let customCanvas = false;
+let gifDecoderPromise = null;
+
+function gcd(a,b){
+  a = Math.abs(Math.round(a)); b = Math.abs(Math.round(b));
+  while(b){ const t = a % b; a = b; b = t; }
+  return a || 1;
+}
+function normalizeRatioKey(w,h){
+  const iw = Math.max(1,Math.round(w));
+  const ih = Math.max(1,Math.round(h));
+  const g = gcd(iw,ih);
+  const rw = iw/g, rh = ih/g;
+  return Object.entries(RATIO_DEFINITIONS).find(([,r]) => r[0]===rw && r[1]===rh)?.[0] || null;
+}
+function dimensionsForRatio(key, tierIndex){
+  if (!RATIO_DEFINITIONS[key]) return [1920,1080];
+  const tier = RESOLUTION_TIERS[Math.max(0,Math.min(RESOLUTION_TIERS.length-1,tierIndex))];
+  if (key === '16:9') return [[854,480],[1280,720],[1920,1080],[3840,2160]][tierIndex];
+  if (key === '9:16') {
+    const p = [[854,480],[1280,720],[1920,1080],[3840,2160]][tierIndex];
+    return [p[1],p[0]];
+  }
+  const [rw,rh] = RATIO_DEFINITIONS[key];
+  if (rw === rh) return [tier.pixels,tier.pixels];
+  const ratio = rw/rh;
+  return ratio > 1
+    ? [Math.round(tier.pixels*ratio), tier.pixels]
+    : [tier.pixels, Math.round(tier.pixels/ratio)];
+}
+function findNearestTier(key,w,h){
+  let bestIndex = 2, bestScore = Infinity;
+  RESOLUTION_TIERS.forEach((_,i)=>{
+    const [tw,th] = dimensionsForRatio(key,i);
+    const score = Math.abs(tw-w) + Math.abs(th-h);
+    if(score < bestScore){bestScore=score;bestIndex=i;}
+  });
+  return bestIndex;
+}
+function updateResolutionUI(){
+  const w = Math.round(Number(els.canvasWidth.value)||canvas.width);
+  const h = Math.round(Number(els.canvasHeight.value)||canvas.height);
+  if(customCanvas || els.canvasPreset.value === 'custom'){
+    els.resolutionLabel.textContent = `カスタム ${w} × ${h}`;
+    els.resolutionDown.disabled = true;
+    els.resolutionUp.disabled = true;
+    return;
+  }
+  const tier = RESOLUTION_TIERS[resolutionTierIndex];
+  els.resolutionLabel.textContent = `${tier.key} ${w} × ${h}`;
+  els.resolutionDown.disabled = resolutionTierIndex <= 0;
+  els.resolutionUp.disabled = resolutionTierIndex >= RESOLUTION_TIERS.length-1;
+}
+function resizeCanvas(w,h,{scaleLayers=true}={}){
+  const oldW = canvas.width || 1;
+  const oldH = canvas.height || 1;
+  const newW = Math.max(1,Math.min(12000,Math.round(Number(w))));
+  const newH = Math.max(1,Math.min(12000,Math.round(Number(h))));
+  if(scaleLayers && layers.length && (oldW !== newW || oldH !== newH)){
+    const sx = newW/oldW;
+    const sy = newH/oldH;
+    layers.forEach(l=>{
+      l.x *= sx; l.y *= sy; l.w = Math.max(1,l.w*sx); l.h = Math.max(1,l.h*sy);
+    });
+  }
+  canvas.width = newW; canvas.height = newH;
+  els.canvasWidth.value = newW; els.canvasHeight.value = newH;
+  applyZoom();
+  syncControls();
+  render();
+}
+function applySelectedCanvasSize(){
+  const w = Math.round(Number(els.canvasWidth.value));
+  const h = Math.round(Number(els.canvasHeight.value));
+  if(!Number.isFinite(w)||!Number.isFinite(h)||w<1||h<1){
+    els.canvasWidth.value = canvas.width;
+    els.canvasHeight.value = canvas.height;
+    return;
+  }
+  resizeCanvas(w,h);
+  const ratioKey = normalizeRatioKey(w,h);
+  if(ratioKey){
+    els.canvasPreset.value = ratioKey;
+    customCanvas = false;
+    resolutionTierIndex = findNearestTier(ratioKey,w,h);
+  }else{
+    els.canvasPreset.value = 'custom';
+    customCanvas = true;
+  }
+  updateResolutionUI();
+}
+function applyPreset(){
+  const key = els.canvasPreset.value;
+  if(key === 'custom'){
+    customCanvas = true;
+    updateResolutionUI();
+    return;
+  }
+  customCanvas = false;
+  const [w,h] = dimensionsForRatio(key,resolutionTierIndex);
+  els.canvasWidth.value = w;
+  els.canvasHeight.value = h;
+  resizeCanvas(w,h);
+  updateResolutionUI();
+}
+els.canvasPreset.addEventListener('change',()=>{
+  if(els.canvasPreset.value === 'custom'){
+    customCanvas = true;
+    updateResolutionUI();
+  }else{
+    customCanvas = false;
+    resolutionTierIndex = 2;
+    applyPreset();
+  }
+});
+[els.canvasWidth,els.canvasHeight].forEach(input=>input.addEventListener('input',()=>{
+  customCanvas = true;
+  els.canvasPreset.value = 'custom';
+  updateResolutionUI();
+}));
+els.applyCanvas.addEventListener('click',applySelectedCanvasSize);
+els.resolutionDown.addEventListener('click',()=>{
+  if(customCanvas || resolutionTierIndex<=0) return;
+  resolutionTierIndex -= 1;
+  applyPreset();
+});
+els.resolutionUp.addEventListener('click',()=>{
+  if(customCanvas || resolutionTierIndex>=RESOLUTION_TIERS.length-1) return;
+  resolutionTierIndex += 1;
+  applyPreset();
+});
+
+async function getGifDecoder(){
+  if(!gifDecoderPromise) gifDecoderPromise = import('https://cdn.jsdelivr.net/npm/gifuct-js@2.1.2/+esm');
+  return gifDecoderPromise;
+}
+function normalizeDelay(ms){
+  const n = Number(ms);
+  if(!Number.isFinite(n) || n <= 0) return 100;
+  return Math.max(20,Math.round(n));
+}
+function sumDurations(frames){
+  return Math.max(1,frames.reduce((sum,f)=>sum+normalizeDelay(f.duration),0));
+}
+async function decodeGifFile(file){
+  const {parseGIF,decompressFrames} = await getGifDecoder();
+  const parsed = parseGIF(await file.arrayBuffer());
+  const decodedFrames = decompressFrames(parsed,true);
+  if(!decodedFrames.length) throw new Error('GIFにフレームがありません。');
+  const logicalW = parsed.lsd.width;
+  const logicalH = parsed.lsd.height;
+  const work = document.createElement('canvas');
+  work.width = logicalW; work.height = logicalH;
+  const wctx = work.getContext('2d',{willReadFrequently:true});
+  if(!wctx) throw new Error('GIF作業用Canvasを作成できませんでした。');
+  let previousDisposal = 0;
+  let previousRect = null;
+  let savedBeforeFrame = null;
+  const out = [];
+  for(const frame of decodedFrames){
+    if(previousDisposal === 2 && previousRect){
+      wctx.clearRect(previousRect.left,previousRect.top,previousRect.width,previousRect.height);
+    }else if(previousDisposal === 3 && savedBeforeFrame){
+      wctx.clearRect(0,0,logicalW,logicalH);
+      wctx.drawImage(savedBeforeFrame,0,0);
+    }
+    if(frame.disposalType === 3){
+      savedBeforeFrame = document.createElement('canvas');
+      savedBeforeFrame.width = logicalW; savedBeforeFrame.height = logicalH;
+      const sctx = savedBeforeFrame.getContext('2d');
+      sctx.drawImage(work,0,0);
+    }else{
+      savedBeforeFrame = null;
+    }
+    const patch = document.createImageData(frame.dims.width,frame.dims.height);
+    patch.data.set(frame.patch);
+    wctx.putImageData(patch,frame.dims.left,frame.dims.top);
+    const full = document.createElement('canvas');
+    full.width = logicalW; full.height = logicalH;
+    full.getContext('2d').drawImage(work,0,0);
+    out.push({source:full,duration:normalizeDelay(frame.delay)});
+    previousDisposal = frame.disposalType || 0;
+    previousRect = frame.dims;
+  }
+  return {frames:out,width:logicalW,height:logicalH,totalDuration:sumDurations(out)};
+}
+async function decodeImageFile(file){
+  const url = URL.createObjectURL(file);
+  try{
+    const image = await new Promise((resolve,reject)=>{
+      const img = new Image();
+      img.onload = ()=>resolve(img);
+      img.onerror = ()=>reject(new Error('画像を読み込めませんでした。'));
+      img.src = url;
+    });
+    return {frames:[{source:image,duration:1000}],width:image.naturalWidth,height:image.naturalHeight,totalDuration:1000};
+  }finally{
+    URL.revokeObjectURL(url);
+  }
+}
+function isGifFile(file){ return file.type === 'image/gif' || /\.gif$/i.test(file.name); }
+function createAssetId(){ return nextAssetId++; }
+function populateAssetPool(){
+  els.assetPoolSelect.innerHTML = '';
+  const placeholder = document.createElement('option');
+  placeholder.value=''; placeholder.disabled=true; placeholder.selected=true;
+  placeholder.textContent = assetPool.length ? '-- ロード済み素材 --' : '-- 素材を読み込んでください --';
+  els.assetPoolSelect.appendChild(placeholder);
+  assetPool.forEach(asset=>{
+    const option = document.createElement('option');
+    option.value = String(asset.id);
+    option.textContent = `${asset.name}${asset.kind==='gif'?` (${asset.frames.length}F)`:''}`;
+    els.assetPoolSelect.appendChild(option);
+  });
+  els.addAssetLayer.disabled = true;
+}
+function getAsset(assetId){ return assetPool.find(a=>String(a.id)===String(assetId)) || null; }
+function createLayerFromAsset(asset){
+  const maxW = canvas.width*0.8;
+  const maxH = canvas.height*0.8;
+  const scale = Math.min(maxW/asset.width,maxH/asset.height,1);
+  const w = Math.max(1,asset.width*scale);
+  const h = Math.max(1,asset.height*scale);
+  return {
+    id: nextLayerId++,
+    name: asset.name,
+    assetId: asset.id,
+    kind: asset.kind,
+    frames: asset.frames,
+    frameDurations: asset.frames.map(frame=>normalizeDelay(frame.duration)),
+    totalDuration: asset.totalDuration,
+    sourceWidth: asset.width,
+    sourceHeight: asset.height,
+    x:(canvas.width-w)/2,
+    y:(canvas.height-h)/2,
+    w,h,baseW:w,baseH:h,rot:0,opacity:1,zoom:100,visible:true
+  };
+}
+function addAssetAsLayer(assetId){
+  const asset = getAsset(assetId);
+  if(!asset) return;
+  const layer = createLayerFromAsset(asset);
+  layers.push(layer);
+  selectedLayerId = layer.id;
+  animationTime = 0;
+  renderLayerUI();
+  syncControls();
+  render();
+  els.gifStatus.textContent = `「${asset.name}」をレイヤーに追加しました。`;
+}
+els.assetFile.addEventListener('change',async()=>{
+  const files = Array.from(els.assetFile.files || []);
+  if(!files.length) return;
+  let loaded = 0, failed = [];
+  els.gifStatus.textContent = `${files.length}件の素材をロード中…`;
+  for(const file of files){
+    try{
+      const gif = isGifFile(file);
+      const decoded = gif ? await decodeGifFile(file) : await decodeImageFile(file);
+      assetPool.push({id:createAssetId(),name:file.name,kind:gif?'gif':'static',...decoded});
+      loaded += 1;
+    }catch(err){
+      failed.push(`${file.name}: ${err?.message || err}`);
+    }
+  }
+  populateAssetPool();
+  els.assetFile.value = '';
+  els.gifStatus.textContent = failed.length
+    ? `${loaded}件ロード / ${failed.length}件失敗`
+    : `${loaded}件の素材をロードしました。リストからレイヤーへ追加できます。`;
+});
+els.assetPoolSelect.addEventListener('change',()=>{ els.addAssetLayer.disabled = !els.assetPoolSelect.value; });
+els.addAssetLayer.addEventListener('click',()=>{
+  const id = els.assetPoolSelect.value;
+  if(!id) return;
+  addAssetAsLayer(id);
+  els.assetPoolSelect.value='';
+  els.addAssetLayer.disabled=true;
+});
+els.addLayerBtn.addEventListener('click',()=>els.assetFile.click());
+
+function getSelectedLayer(){ return layers.find(l=>l.id===selectedLayerId) || null; }
+function getFrameSourceAt(layer,time){
+  if(!layer?.frames?.length) return null;
+  const total = Math.max(1,layer.totalDuration);
+  let t = ((Number(time)||0)%total+total)%total;
+  for(let i=0;i<layer.frames.length;i++){
+    const delay = normalizeDelay(layer.frameDurations[i]);
+    if(t < delay) return layer.frames[i].source;
+    t -= delay;
+  }
+  return layer.frames[layer.frames.length-1].source;
+}
+function animationTotalDuration(){
+  const durations = layers.filter(l=>l.frames?.length>1).map(l=>l.totalDuration);
+  return Math.max(1,...durations);
+}
+function hasAnimatedLayer(){ return layers.some(l=>l.frames?.length>1); }
+function renderLayerUI(){
+  els.layerList.innerHTML='';
+  if(!layers.length){
+    els.layerList.innerHTML='<div class="layer-empty">レイヤーがありません。素材を読み込み、レイヤーを追加してください。必要なだけ複数追加できます。</div>';
+    els.layerStatus.textContent='0 レイヤー';
+    [els.layerUpBtn,els.layerDownBtn,els.duplicateLayerBtn,els.deleteLayerBtn].forEach(btn=>btn.disabled=true);
+    return;
+  }
+  [...layers].reverse().forEach(layer=>{
+    const item = document.createElement('div');
+    item.className = `layer${layer.id===selectedLayerId?' active':''}`;
+    const index = layers.indexOf(layer);
+    const badge = document.createElement('div');
+    badge.className='badge'; badge.textContent=String(layers.length-index);
+    const info = document.createElement('div');
+    info.className='layer-info';
+    const name = document.createElement('div'); name.className='layer-name'; name.textContent=layer.name;
+    const state = document.createElement('div'); state.className='layer-state';
+    state.textContent = `${layer.kind==='gif'?`GIF ${layer.frames.length}F`:'静止画'} / ${layer.visible?'表示':'非表示'}`;
+    info.append(name,state);
+    const actions = document.createElement('div'); actions.className='layer-actions';
+    const visibility = document.createElement('button'); visibility.type='button'; visibility.textContent=layer.visible?'表示':'非表示';
+    visibility.addEventListener('click',e=>{
+      e.stopPropagation(); layer.visible=!layer.visible; renderLayerUI(); render();
+    });
+    actions.appendChild(visibility);
+    item.append(badge,info,actions);
+    item.addEventListener('click',()=>{
+      selectedLayerId=layer.id; renderLayerUI(); syncControls(); render();
+    });
+    els.layerList.appendChild(item);
+  });
+  els.layerStatus.textContent = `${layers.length} レイヤー`;
+  const selected = getSelectedLayer();
+  const index = selected ? layers.indexOf(selected) : -1;
+  els.layerUpBtn.disabled = !selected || index >= layers.length-1;
+  els.layerDownBtn.disabled = !selected || index <= 0;
+  els.duplicateLayerBtn.disabled = !selected;
+  els.deleteLayerBtn.disabled = !selected;
+}
+function syncControls(){
+  const layer = getSelectedLayer();
+  const disabled = !layer;
+  [els.x,els.y,els.w,els.h,els.layerZoom,els.layerZoomNumber,els.rot,els.rotNumber,els.opacity,els.opacityNumber,els.fit,els.center,els.duplicateLayerBtn,els.deleteLayerBtn].forEach(el=>el.disabled=disabled);
+  if(!layer){
+    els.selectedLayerTitle.textContent='選択なし';
+    [els.x,els.y,els.w,els.h].forEach(el=>el.value='');
+    els.layerZoomNumber.value=100; els.layerZoom.value=100; els.rotNumber.value=0; els.rot.value=0; els.opacityNumber.value=100; els.opacity.value=100;
+    return;
+  }
+  els.selectedLayerTitle.textContent = `${layer.name} #${layers.indexOf(layer)+1}`;
+  els.x.value = Math.round(layer.x);
+  els.y.value = Math.round(layer.y);
+  els.w.value = Math.round(layer.w);
+  els.h.value = Math.round(layer.h);
+  els.layerZoomNumber.value = Math.round(layer.zoom ?? 100);
+  els.layerZoom.value = Math.max(5,Math.min(400,Math.round(layer.zoom ?? 100)));
+  els.rotNumber.value = Math.round(layer.rot);
+  els.rot.value = Math.max(-180,Math.min(180,Math.round(layer.rot)));
+  const op = Math.round(layer.opacity*100);
+  els.opacityNumber.value = op;
+  els.opacity.value = op;
+}
+function renderLayerStatus(){
+  const animated = layers.filter(l=>l.frames?.length>1);
+  if(animated.length){
+    const maxFrames = Math.max(...animated.map(l=>l.frames.length));
+    els.gifStatus.textContent = `アニメーション: ${maxFrames}フレーム / 約${(animationTotalDuration()/1000).toFixed(2)}秒 / ${layers.length}レイヤー`;
+  }else{
+    els.gifStatus.textContent = `静止画モード / ${layers.length}レイヤー`;
+  }
+}
+function updateLayerTransformFromNumbers(){
+  const layer = getSelectedLayer(); if(!layer) return;
+  const values = {
+    x:Number(els.x.value), y:Number(els.y.value), w:Number(els.w.value), h:Number(els.h.value)
+  };
+  for(const [key,value] of Object.entries(values)){
+    if(!Number.isFinite(value)) continue;
+    layer[key] = (key==='w'||key==='h') ? Math.max(1,value) : value;
+  }
+  if(Number.isFinite(Number(values.w)) || Number.isFinite(Number(values.h))){
+    layer.baseW=layer.w; layer.baseH=layer.h; layer.zoom=100;
+    els.layerZoomNumber.value=100; els.layerZoom.value=100;
+  }
+  render();
+}
+['x','y','w','h'].forEach(key=>els[key].addEventListener('input',updateLayerTransformFromNumbers));
+function applyLayerZoom(value){
+  const layer=getSelectedLayer(); const n=Number(value); if(!layer||!Number.isFinite(n)) return;
+  const next=Math.max(5,Math.min(1000,n));
+  const baseW=Number(layer.baseW)||layer.w||1;
+  const baseH=Number(layer.baseH)||layer.h||1;
+  const cx=layer.x+layer.w/2, cy=layer.y+layer.h/2;
+  layer.zoom=next;
+  layer.w=Math.max(1,baseW*next/100);
+  layer.h=Math.max(1,baseH*next/100);
+  layer.x=cx-layer.w/2; layer.y=cy-layer.h/2;
+  els.layerZoomNumber.value=next;
+  els.layerZoom.value=Math.max(5,Math.min(400,next));
+  els.w.value=Math.round(layer.w); els.h.value=Math.round(layer.h);
+  render();
+}
+els.layerZoom.addEventListener('input',()=>applyLayerZoom(els.layerZoom.value));
+els.layerZoomNumber.addEventListener('input',()=>applyLayerZoom(els.layerZoomNumber.value));
+function applyRotation(value){
+  const layer = getSelectedLayer(); const n = Number(value); if(!layer||!Number.isFinite(n)) return;
+  const rotation = Math.max(-3600,Math.min(3600,n));
+  layer.rot=rotation;
+  els.rotNumber.value=rotation;
+  els.rot.value=Math.max(-180,Math.min(180,rotation));
+  render();
+}
+function applyOpacity(value){
+  const layer = getSelectedLayer(); const n = Number(value); if(!layer||!Number.isFinite(n)) return;
+  const opacity = Math.max(0,Math.min(100,n));
+  layer.opacity=opacity/100;
+  els.opacityNumber.value=opacity;
+  els.opacity.value=opacity;
+  render();
+}
+els.rot.addEventListener('input',()=>applyRotation(els.rot.value));
+els.rotNumber.addEventListener('input',()=>applyRotation(els.rotNumber.value));
+els.opacity.addEventListener('input',()=>applyOpacity(els.opacity.value));
+els.opacityNumber.addEventListener('input',()=>applyOpacity(els.opacityNumber.value));
+function centerLayer(layer){
+  if(!layer) return;
+  layer.x=(canvas.width-layer.w)/2;
+  layer.y=(canvas.height-layer.h)/2;
+}
+function fitLayer(layer){
+  if(!layer) return;
+  const sw = layer.sourceWidth || 1;
+  const sh = layer.sourceHeight || 1;
+  const scale = Math.min(canvas.width/sw,canvas.height/sh);
+  layer.w=Math.max(1,sw*scale);
+  layer.h=Math.max(1,sh*scale);
+  layer.baseW=layer.w; layer.baseH=layer.h; layer.zoom=100;
+  centerLayer(layer);
+}
+els.center.addEventListener('click',()=>{centerLayer(getSelectedLayer());syncControls();render();});
+els.fit.addEventListener('click',()=>{fitLayer(getSelectedLayer());syncControls();render();});
+els.deleteLayerBtn.addEventListener('click',()=>{
+  const oldIndex = layers.findIndex(l=>l.id===selectedLayerId);
+  if(oldIndex<0) return;
+  layers.splice(oldIndex,1);
+  selectedLayerId = layers[oldIndex]?.id || layers[oldIndex-1]?.id || null;
+  renderLayerUI(); syncControls(); render();
+});
+els.duplicateLayerBtn.addEventListener('click',()=>{
+  const layer=getSelectedLayer(); if(!layer) return;
+  const copy={...layer,id:nextLayerId++,x:layer.x+20,y:layer.y+20,frames:layer.frames,frameDurations:[...layer.frameDurations],baseW:layer.baseW,baseH:layer.baseH,zoom:layer.zoom ?? 100};
+  layers.push(copy); selectedLayerId=copy.id; renderLayerUI(); syncControls(); render();
+});
+els.layerUpBtn.addEventListener('click',()=>{
+  const layer=getSelectedLayer(),i=layers.indexOf(layer); if(i<0||i>=layers.length-1)return;
+  [layers[i],layers[i+1]]=[layers[i+1],layers[i]]; renderLayerUI(); render();
+});
+els.layerDownBtn.addEventListener('click',()=>{
+  const layer=getSelectedLayer(),i=layers.indexOf(layer); if(i<=0)return;
+  [layers[i],layers[i-1]]=[layers[i-1],layers[i]]; renderLayerUI(); render();
+});
+
+function drawLayer(layer,targetCtx,time){
+  if(!layer?.visible) return;
+  const source=getFrameSourceAt(layer,time); if(!source) return;
+  targetCtx.save();
+  targetCtx.globalAlpha=layer.opacity;
+  const cx=layer.x+layer.w/2, cy=layer.y+layer.h/2;
+  targetCtx.translate(cx,cy);
+  targetCtx.rotate(layer.rot*Math.PI/180);
+  targetCtx.imageSmoothingEnabled=true;
+  targetCtx.imageSmoothingQuality='high';
+  targetCtx.drawImage(source,-layer.w/2,-layer.h/2,layer.w,layer.h);
+  targetCtx.restore();
+}
+function drawSelection(){
+  const layer=getSelectedLayer();
+  if(!layer||!layer.visible||!getFrameSourceAt(layer,animationTime)) return;
+  ctx.save();
+  ctx.translate(layer.x+layer.w/2,layer.y+layer.h/2);
+  ctx.rotate(layer.rot*Math.PI/180);
+  ctx.strokeStyle='#2563eb';
+  ctx.lineWidth=2/Math.max(0.05,zoom);
+  ctx.setLineDash([8/Math.max(0.05,zoom),5/Math.max(0.05,zoom)]);
+  ctx.strokeRect(-layer.w/2,-layer.h/2,layer.w,layer.h);
+  ctx.restore();
+}
+function render(time=animationTime){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.imageSmoothingEnabled=true;
+  ctx.imageSmoothingQuality='high';
+  layers.forEach(layer=>drawLayer(layer,ctx,time));
+  drawSelection();
+  els.download.disabled = layers.length===0;
+  els.downloadGif.disabled = layers.length===0 || typeof window.GIF === 'undefined';
+  renderLayerStatus();
+}
+
+function canvasPointFromPointer(event){
+  const rect=canvas.getBoundingClientRect();
+  return {
+    x:(event.clientX-rect.left)*(canvas.width/rect.width),
+    y:(event.clientY-rect.top)*(canvas.height/rect.height)
+  };
+}
+function pointInsideRotatedLayer(layer,px,py){
+  const cx=layer.x+layer.w/2,cy=layer.y+layer.h/2;
+  const angle=-layer.rot*Math.PI/180;
+  const dx=px-cx,dy=py-cy;
+  const rx=dx*Math.cos(angle)-dy*Math.sin(angle);
+  const ry=dx*Math.sin(angle)+dy*Math.cos(angle);
+  return Math.abs(rx)<=layer.w/2 && Math.abs(ry)<=layer.h/2;
+}
+canvas.addEventListener('pointerdown',event=>{
+  const point=canvasPointFromPointer(event);
+  for(let i=layers.length-1;i>=0;i--){
+    const layer=layers[i];
+    if(!layer.visible) continue;
+    if(!getFrameSourceAt(layer,animationTime)) continue;
+    if(pointInsideRotatedLayer(layer,point.x,point.y)){
+      selectedLayerId=layer.id;
+      renderLayerUI();
+      syncControls();
+      drag={pointerId:event.pointerId,startX:point.x,startY:point.y,originX:layer.x,originY:layer.y};
+      canvas.setPointerCapture(event.pointerId);
+      event.preventDefault();
+      return;
+    }
+  }
+});
+canvas.addEventListener('pointermove',event=>{
+  if(!drag) return;
+  const layer=getSelectedLayer(); if(!layer) return;
+  const point=canvasPointFromPointer(event);
+  layer.x=drag.originX+(point.x-drag.startX);
+  layer.y=drag.originY+(point.y-drag.startY);
+  syncControls();
+  render();
+  event.preventDefault();
+});
+function endDrag(){drag=null}
+canvas.addEventListener('pointerup',endDrag);
+canvas.addEventListener('pointercancel',endDrag);
+canvas.addEventListener('lostpointercapture',endDrag);
+
+function setZoomFromValue(value){
+  const n=Number(value); if(!Number.isFinite(n)) return;
+  const percent=Math.max(5,Math.min(100,n));
+  zoom=percent/100;
+  els.zoomNumber.value=percent;
+  els.zoomRange.value=percent;
+  applyZoom();
+}
+function applyZoom(){
+  canvas.style.width=`${canvas.width*zoom}px`;
+  canvas.style.height=`${canvas.height*zoom}px`;
+}
+els.zoomOut.addEventListener('click',()=>setZoomFromValue(Math.round(zoom*100)-5));
+els.zoomIn.addEventListener('click',()=>setZoomFromValue(Math.round(zoom*100)+5));
+els.zoomNumber.addEventListener('input',()=>setZoomFromValue(els.zoomNumber.value));
+els.zoomRange.addEventListener('input',()=>setZoomFromValue(els.zoomRange.value));
+
+function setAnimationSpeedFromValue(value){
+  const n=Number(value); if(!Number.isFinite(n)) return;
+  const percent=Math.max(1,Math.min(1000,n));
+  animationSpeed=percent/100;
+  els.gifSpeedNumber.value=percent;
+  els.gifSpeed.value=Math.max(25,Math.min(200,percent));
+}
+els.gifPlay.addEventListener('click',()=>{
+  animationPlaying=!animationPlaying;
+  els.gifPlay.textContent=animationPlaying?'再生中':'一時停止';
+  lastAnimationTimestamp=performance.now();
+});
+els.gifToStart.addEventListener('click',()=>{animationTime=0;render();});
+els.gifSpeed.addEventListener('input',()=>setAnimationSpeedFromValue(els.gifSpeed.value));
+els.gifSpeedNumber.addEventListener('input',()=>setAnimationSpeedFromValue(els.gifSpeedNumber.value));
+
+function downloadBlob(blob,name){
+  if(!blob) return;
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.download=name; a.href=url; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+els.download.addEventListener('click',()=>{
+  if(!layers.length) return;
+  const out=document.createElement('canvas');
+  out.width=canvas.width; out.height=canvas.height;
+  const outCtx=out.getContext('2d');
+  layers.forEach(layer=>drawLayer(layer,outCtx,animationTime));
+  out.toBlob(blob=>downloadBlob(blob,'composite.png'),'image/png');
+});
+function buildExportTimeline(total){
+  const boundaries = new Set([0,total]);
+  layers.forEach(layer=>{
+    if(!layer.frames?.length || layer.frames.length<=1) return;
+    const period=layer.totalDuration;
+    if(!period) return;
+    let cycleStart=0;
+    while(cycleStart < total){
+      let t=0;
+      for(const delay of layer.frameDurations){
+        t += normalizeDelay(delay);
+        const point=cycleStart+t;
+        if(point>0 && point<total) boundaries.add(point);
+      }
+      cycleStart += period;
+    }
+  });
+  let times=[...boundaries].filter(Number.isFinite).sort((a,b)=>a-b);
+  if(times.length<2) return [{start:0,delay:Math.max(20,Math.round(total))}];
+  let intervals=[];
+  for(let i=0;i<times.length-1;i++){
+    const delay=times[i+1]-times[i];
+    if(delay>0) intervals.push({start:times[i],delay});
+  }
+  if(intervals.length>600){
+    const factor=Math.ceil(intervals.length/600);
+    const merged=[];
+    for(let i=0;i<intervals.length;i+=factor){
+      let delay=0;
+      for(let j=i;j<Math.min(intervals.length,i+factor);j++) delay+=intervals[j].delay;
+      merged.push({start:intervals[i].start,delay});
+    }
+    intervals=merged;
+  }
+  return intervals.map(item=>({...item,delay:Math.max(20,Math.round(item.delay))}));
+}
+async function exportGif(){
+  if(!layers.length || typeof window.GIF === 'undefined') return;
+  els.download.disabled=true; els.downloadGif.disabled=true;
+  els.exportStatus.textContent='GIFを生成中…';
+  try{
+    const total=animationTotalDuration();
+    const timeline=buildExportTimeline(total);
+    const gif=new window.GIF({
+      workers:2,
+      quality:10,
+      width:canvas.width,
+      height:canvas.height,
+      repeat:0,
+      workerScript:'https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js'
+    });
+    const frameCanvas=document.createElement('canvas');
+    frameCanvas.width=canvas.width; frameCanvas.height=canvas.height;
+    const frameCtx=frameCanvas.getContext('2d');
+    timeline.forEach((item,index)=>{
+      frameCtx.clearRect(0,0,frameCanvas.width,frameCanvas.height);
+      layers.forEach(layer=>drawLayer(layer,frameCtx,item.start));
+      gif.addFrame(frameCanvas,{copy:true,delay:item.delay});
+      if(index%10===0 || index===timeline.length-1){
+        els.exportStatus.textContent=`GIFを生成中… ${index+1}/${timeline.length}フレーム`;
+      }
+    });
+    gif.on('progress',progress=>{
+      els.exportStatus.textContent=`GIFをエンコード中… ${Math.round(progress*100)}%`;
+    });
+    gif.on('finished',blob=>{
+      downloadBlob(blob,'composite.gif');
+      els.exportStatus.textContent=`完了：${timeline.length}フレーム / 約${(total/1000).toFixed(2)}秒`;
+      els.download.disabled=false; els.downloadGif.disabled=false;
+    });
+    gif.on('abort',()=>{
+      els.exportStatus.textContent='GIF書き出しを中止しました。';
+      els.download.disabled=false; els.downloadGif.disabled=false;
+    });
+    gif.render();
+  }catch(error){
+    console.error(error);
+    els.exportStatus.textContent=`GIF書き出し失敗: ${error?.message || error}`;
+    els.download.disabled=layers.length===0;
+    els.downloadGif.disabled=layers.length===0 || typeof window.GIF==='undefined';
+  }
+}
+els.downloadGif.addEventListener('click',exportGif);
+
+els.customTitleInput.addEventListener('input',()=>{
+  const title=els.customTitleInput.value.trim();
+  document.title=title?`${title} | Image Layer Composer`:'Image Layer Composer';
+});
+
+function resetAll(){
+  layers=[];
+  assetPool=[];
+  selectedLayerId=null;
+  nextLayerId=1;
+  nextAssetId=1;
+  animationTime=0;
+  animationPlaying=true;
+  els.gifPlay.textContent='再生中';
+  els.assetFile.value='';
+  els.assetPoolSelect.value='';
+  els.addAssetLayer.disabled=true;
+  els.exportStatus.textContent='';
+  els.canvasPreset.value='16:9';
+  resolutionTierIndex=2;
+  customCanvas=false;
+  resizeCanvas(1920,1080,{scaleLayers:false});
+  updateResolutionUI();
+  populateAssetPool();
+  renderLayerUI();
+  syncControls();
+  render();
+}
+els.reset.addEventListener('click',resetAll);
+
+function tick(now){
+  const delta=Math.max(0,now-lastAnimationTimestamp);
+  lastAnimationTimestamp=now;
+  if(animationPlaying && hasAnimatedLayer()){
+    animationTime=(animationTime+delta*animationSpeed)%animationTotalDuration();
+  }
+  render();
+  requestAnimationFrame(tick);
+}
+
+// 初期状態
+els.canvasPreset.value='16:9';
+els.canvasWidth.value='1920';
+els.canvasHeight.value='1080';
+customCanvas=false;
+resolutionTierIndex=2;
+setZoomFromValue(100);
+setAnimationSpeedFromValue(100);
+updateResolutionUI();
+populateAssetPool();
+renderLayerUI();
+syncControls();
+render();
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>
