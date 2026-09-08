@@ -139,7 +139,7 @@
   .unit-input input{padding-right:28px}
   .unit-input .unit{position:absolute;right:9px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:12px;pointer-events:none;line-height:1}
   .window-hint{font-size:11px;color:var(--muted);margin-left:auto}
-  .stage-area{min-height:calc(100vh - 260px);max-height:calc(100vh - 130px);display:grid;place-items:start center;align-content:start;overflow:auto;padding:10px 14px 20px;background:#fafbfc;border-radius:0 0 12px 12px}
+  .stage-area{min-height:calc(100vh - 260px);max-height:calc(100vh - 130px);display:grid;place-items:start center;align-content:start;overflow:auto;padding:10px 14px 20px;background:#fafbfc;border-radius:0 0 12px 12px;box-sizing:border-box}
   #canvas{display:block;flex:0 0 auto;max-width:none;max-height:none;width:960px;height:540px;border:1px solid #cbd5e1;border-radius:8px;background:linear-gradient(45deg,#eee 25%,transparent 25%),linear-gradient(-45deg,#eee 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#eee 75%),linear-gradient(-45deg,transparent 75%,#eee 75%);background-size:24px 24px;background-position:0 0,0 12px,12px -12px,-12px 0;box-shadow:0 8px 24px rgba(0,0,0,.06);touch-action:none}
   .editor-window{display:flex;flex-direction:column;min-height:0}
   .editor-content{padding:12px;overflow:auto;max-height:calc(100vh - 130px)}
@@ -525,6 +525,7 @@ let nextLayerId = 1;
 let nextAssetId = 1;
 let drag = null;
 let zoom = 1;
+let zoomAutoFit = true;
 let animationPlaying = true;
 let animationSpeed = 1;
 let animationTime = 0;
@@ -597,7 +598,7 @@ function resizeCanvas(w,h,{scaleLayers=true}={}){
   }
   canvas.width = newW; canvas.height = newH;
   els.canvasWidth.value = newW; els.canvasHeight.value = newH;
-  applyZoom();
+  applyAutoFitZoom();
   syncControls();
   render();
 }
@@ -1079,10 +1080,11 @@ canvas.addEventListener('pointerup',endDrag);
 canvas.addEventListener('pointercancel',endDrag);
 canvas.addEventListener('lostpointercapture',endDrag);
 
-function setZoomFromValue(value){
+function setZoomFromValue(value, {manual=true}={}){
   const n=Number(value); if(!Number.isFinite(n)) return;
   const percent=Math.max(5,Math.min(100,n));
   zoom=percent/100;
+  if(manual) zoomAutoFit=false;
   els.zoomNumber.value=percent;
   els.zoomRange.value=percent;
   applyZoom();
@@ -1091,10 +1093,35 @@ function applyZoom(){
   canvas.style.width=`${canvas.width*zoom}px`;
   canvas.style.height=`${canvas.height*zoom}px`;
 }
+function calculateAutoFitZoom(){
+  const area=els.stageArea;
+  if(!area || !canvas.width || !canvas.height) return 1;
+  const styles=getComputedStyle(area);
+  const horizontalPadding=(parseFloat(styles.paddingLeft)||0)+(parseFloat(styles.paddingRight)||0);
+  const verticalPadding=(parseFloat(styles.paddingTop)||0)+(parseFloat(styles.paddingBottom)||0);
+  const availableWidth=Math.max(80, area.clientWidth-horizontalPadding-8);
+  const availableHeight=Math.max(80, area.clientHeight-verticalPadding-8);
+  const fitByWidth=availableWidth/canvas.width;
+  const fitByHeight=availableHeight/canvas.height;
+  const fit=Math.min(fitByWidth,fitByHeight);
+  // 画面を埋め尽くしすぎないよう、少し余白を残す。
+  const percent=Math.max(5,Math.min(100,Math.floor(fit*100*0.90)));
+  return percent/100;
+}
+function applyAutoFitZoom(){
+  if(!zoomAutoFit) return;
+  const autoZoom=calculateAutoFitZoom();
+  zoom=autoZoom;
+  const percent=Math.round(zoom*100);
+  els.zoomNumber.value=percent;
+  els.zoomRange.value=percent;
+  applyZoom();
+}
 els.zoomOut.addEventListener('click',()=>setZoomFromValue(Math.round(zoom*100)-5));
 els.zoomIn.addEventListener('click',()=>setZoomFromValue(Math.round(zoom*100)+5));
 els.zoomNumber.addEventListener('input',()=>setZoomFromValue(els.zoomNumber.value));
 els.zoomRange.addEventListener('input',()=>setZoomFromValue(els.zoomRange.value));
+window.addEventListener('resize',()=>applyAutoFitZoom());
 
 function setAnimationSpeedFromValue(value){
   const n=Number(value); if(!Number.isFinite(n)) return;
