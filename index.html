@@ -26,6 +26,7 @@
     --canvas-border:#334155;  /* キャンバス枠線を落ち着かせる */
     --checker-light:#1e293b;  /* プレビュー背景の市松模様（明）を暗く */
     --checker-dark:#0f172a;   /* プレビュー背景の市松模様（暗）を暗く */
+    --range-thumb:#e2e8f0;    /* シークバーのつまみ：純白を避けて目に優しく */
   }
   [data-theme="light"]{
     color-scheme: light;
@@ -47,6 +48,7 @@
     --canvas-border:#cbd5e1;
     --checker-light:#e5e7eb;
     --checker-dark:#cbd5e1;
+    --range-thumb:#ffffff;
   }
   *{box-sizing:border-box}
   html,body{min-height:100%;margin:0}
@@ -76,11 +78,12 @@
   min-width:0;
   height:6px;
   cursor:pointer;
+  --range-progress:0%;
 }
 input[type=range]::-webkit-slider-runnable-track{
   height:6px;
   border-radius:999px;
-  background:var(--line);
+  background:linear-gradient(to right,var(--accent) 0%,var(--accent) var(--range-progress),var(--line) var(--range-progress),var(--line) 100%);
 }
 input[type=range]::-webkit-slider-thumb{
   -webkit-appearance:none;
@@ -90,7 +93,7 @@ input[type=range]::-webkit-slider-thumb{
   margin-top:-5px;
   border:2px solid var(--accent);
   border-radius:50%;
-  background:var(--button-bg);
+  background:var(--range-thumb);
   box-shadow:0 0 0 2px rgba(2,132,199,.12);
 }
 input[type=range]::-moz-range-track{
@@ -108,7 +111,7 @@ input[type=range]::-moz-range-thumb{
   height:16px;
   border:2px solid var(--accent);
   border-radius:50%;
-  background:var(--button-bg);
+  background:var(--range-thumb);
   box-shadow:0 0 0 2px rgba(2,132,199,.12);
 }
 
@@ -985,6 +988,7 @@ function syncAnimationFrameControls(){
   const frame=animationFrameFromTime(animationTime);
   els.gifFrameNumber.value=frame;
   els.gifFrameRange.value=frame;
+  updateRangeProgress(els.gifFrameRange);
   const hasFrameControl=hasAnimatedLayer();
   els.gifFrameNumber.disabled=!hasFrameControl;
   els.gifFrameRange.disabled=!hasFrameControl;
@@ -1103,6 +1107,7 @@ function applyLayerZoom(value){
   layer.x=cx-layer.w/2; layer.y=cy-layer.h/2;
   els.layerZoomNumber.value=next;
   els.layerZoom.value=Math.max(5,Math.min(400,next));
+  updateRangeProgress(els.layerZoom);
   els.w.value=Math.round(layer.w); els.h.value=Math.round(layer.h);
   render();
 }
@@ -1336,6 +1341,7 @@ function setZoomFromValue(value, {manual=true}={}){
   if(manual) zoomAutoFit=false;
   els.zoomNumber.value=percent;
   els.zoomRange.value=percent;
+  updateRangeProgress(els.zoomRange);
   applyZoom();
 }
 function applyZoom(){
@@ -1364,6 +1370,7 @@ function applyAutoFitZoom(){
   const percent=Math.round(zoom*100);
   els.zoomNumber.value=percent;
   els.zoomRange.value=percent;
+  updateRangeProgress(els.zoomRange);
   applyZoom();
 }
 els.zoomOut.addEventListener('click',()=>setZoomFromValue(Math.round(zoom*100)-5));
@@ -1372,12 +1379,32 @@ els.zoomNumber.addEventListener('input',()=>setZoomFromValue(els.zoomNumber.valu
 els.zoomRange.addEventListener('input',()=>setZoomFromValue(els.zoomRange.value));
 window.addEventListener('resize',()=>applyAutoFitZoom());
 
+function updateRangeProgress(range){
+  if(!range) return;
+  const min=Number(range.min);
+  const max=Number(range.max);
+  const value=Number(range.value);
+  const percent=(Number.isFinite(min)&&Number.isFinite(max)&&max>min&&Number.isFinite(value))
+    ? Math.max(0,Math.min(100,((value-min)/(max-min))*100))
+    : 0;
+  range.style.setProperty('--range-progress',`${percent}%`);
+}
+function syncAllRangeProgress(){
+  document.querySelectorAll('input[type="range"]').forEach(updateRangeProgress);
+}
+document.querySelectorAll('input[type="range"]').forEach(range=>{
+  updateRangeProgress(range);
+  range.addEventListener('input',()=>updateRangeProgress(range));
+  range.addEventListener('change',()=>updateRangeProgress(range));
+});
+
 function setAnimationSpeedFromValue(value){
   const n=Number(value); if(!Number.isFinite(n)) return;
   const percent=Math.max(1,Math.min(1000,n));
   animationSpeed=percent/100;
   els.gifSpeedNumber.value=percent;
   els.gifSpeed.value=Math.max(25,Math.min(400,percent));
+  updateRangeProgress(els.gifSpeed);
 }
 function setAnimationFrameFromValue(value){
   if(!layers.some(l=>l.frames?.length>1)) return;
