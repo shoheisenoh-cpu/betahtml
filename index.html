@@ -1566,6 +1566,10 @@ function renderExportFrame(targetCtx,time){
   layers.forEach(layer=>drawLayer(layer,targetCtx,time,time));
 }
 
+function getExportPlaybackSpeed(){
+  return Math.max(0.01,Math.min(10,Number(animationSpeed)||1));
+}
+
 function buildExportTimeline(total, frameCount=30){
   const duration=Math.max(1,Number(total)||1);
   const count=Math.max(1,Math.min(900,Math.round(Number(frameCount)||1)));
@@ -1610,10 +1614,16 @@ function exportStill(format){
 async function exportGif(mode){
   if(!layers.length) return;
   if(typeof window.GIF==='undefined') throw new Error('GIFエンコーダーが読み込まれていません。ネットワーク接続を確認してください。');
-  const total=animationTotalDuration();
+
+  // 書き出しはプレビューと同じ再生速度で進めます。
+  // 例えば200%なら、元GIFの2秒は書き出しGIFでは1秒になります。
+  // 各出力フレームは「書き出し時間 × 再生速度」の位置から静止画として取得します。
+  const playbackSpeed=getExportPlaybackSpeed();
+  const sourceDuration=animationTotalDuration();
+  const exportDuration=Math.max(1,sourceDuration/playbackSpeed);
   const requestedFrames=Math.max(2,Math.min(900,Math.round(Number(els.gifExportFrames.value)||30)));
   els.gifExportFrames.value=requestedFrames;
-  const timeline=buildExportTimeline(total,requestedFrames);
+  const timeline=buildExportTimeline(exportDuration,requestedFrames);
   const workerScript=await getGifWorkerScript();
   const highQuality=mode==='gif-quality';
   const gif=new window.GIF({
@@ -1645,13 +1655,15 @@ async function exportGif(mode){
       if(!blob) return reject(new Error('GIFの生成結果が空です。'));
       const suffix=highQuality?'gif-high-quality':'gif-compatible';
       downloadBlob(blob,`composite-${suffix}.gif`);
-      els.exportStatus.textContent=`完了：${timeline.length}フレーム / 約${(total/1000).toFixed(2)}秒`;
+      els.exportStatus.textContent=`完了：${timeline.length}フレーム / 約${(exportDuration/1000).toFixed(2)}秒 / 再生速度${Math.round(playbackSpeed*100)}%`;
       resolve(blob);
     }));
     gif.on('abort',finish(()=>reject(new Error('GIF書き出しを中止しました。'))));
     try{
       timeline.forEach((item,index)=>{
-        renderExportFrame(frameCtx,item.start);
+        // 出力時間を元GIFの時間軸へ戻してから静止画化します。
+        const sourceTime=Math.min(sourceDuration-1,item.start*playbackSpeed);
+        renderExportFrame(frameCtx,sourceTime);
         gif.addFrame(frameCanvas,{copy:true,delay:item.delay});
         if(index%10===0 || index===timeline.length-1){
           els.exportStatus.textContent=`GIFを生成中… ${index+1}/${timeline.length}フレーム`;
