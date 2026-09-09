@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Image Layer Composer</title>
+<title>TextImageEditer_Ver.1</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@700;900&family=Zen+KakuGothic+New:wght@700;900&family=Zen+Old+Mincho:wght@700;900&display=swap" rel="stylesheet">
 <style>
   :root{
@@ -13,19 +13,19 @@
     --sub:#0f172a;
     --item:#1e293b;
     --line:#334155;
-    --text:#f8fafc;
+    --text:#e2e8f0;          /* #f8fafc から僅かにトーンダウン（眩しさ軽減） */
     --muted:#94a3b8;
-    --accent:#38bdf8;
-    --accent-hover:#0284c7;
+    --accent:#0284c7;        /* #38bdf8 から落ち着いたブルーへ変更 */
+    --accent-hover:#0369a1;  /* ホバー色を一段暗く設定 */
     --danger:#4c1d2a;
     --danger-text:#fecdd3;
     --shadow:0 10px 30px rgba(0,0,0,.25);
-    --button-bg:#475569;
-    --button-hover:#334155;
+    --button-bg:#334155;      /* 基本ボタンの背景色をスレートグレーに設定 */
+    --button-hover:#475569;
     --stage-bg:#111827;
-    --canvas-border:#475569;
-    --checker-light:#3b4554;
-    --checker-dark:#242b35;
+    --canvas-border:#334155;  /* キャンバス枠線を落ち着かせる */
+    --checker-light:#1e293b;  /* プレビュー背景の市松模様（明）を暗く */
+    --checker-dark:#0f172a;   /* プレビュー背景の市松模様（暗）を暗く */
   }
   [data-theme="light"]{
     color-scheme: light;
@@ -52,7 +52,10 @@
   html,body{min-height:100%;margin:0}
   body{
     font-family:'Noto Sans JP',sans-serif;
+    margin:0; padding:20px;
     background:var(--bg); color:var(--text);
+    transition:background .3s,color .3s;
+    box-sizing:border-box;
   }
   button{cursor:pointer;background:#0284c7;color:white;border:none;font-weight:bold;transition:background .2s,transform .1s;border-radius:20px;padding:8px 16px;font-size:13px;white-space:nowrap}
   button:hover:not(:disabled){background:#0369a1}
@@ -67,12 +70,53 @@
     width:100%;padding:8px 12px;font-size:14px;background-color:var(--sub);color:var(--text);border:1px solid var(--line);border-radius:8px;min-width:0;transition:all .2s ease;
   }
   input[type=file]{padding:7px 8px;background:var(--sub)}
-  input[type=range]{width:100%;accent-color:var(--accent);min-width:0}
+  input[type=range]{
+  width:100%;
+  accent-color:var(--accent);
+  min-width:0;
+  height:6px;
+  cursor:pointer;
+}
+input[type=range]::-webkit-slider-runnable-track{
+  height:6px;
+  border-radius:999px;
+  background:var(--line);
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;
+  appearance:none;
+  width:16px;
+  height:16px;
+  margin-top:-5px;
+  border:2px solid var(--accent);
+  border-radius:50%;
+  background:var(--button-bg);
+  box-shadow:0 0 0 2px rgba(2,132,199,.12);
+}
+input[type=range]::-moz-range-track{
+  height:6px;
+  border-radius:999px;
+  background:var(--line);
+}
+input[type=range]::-moz-range-progress{
+  height:6px;
+  border-radius:999px;
+  background:var(--accent);
+}
+input[type=range]::-moz-range-thumb{
+  width:16px;
+  height:16px;
+  border:2px solid var(--accent);
+  border-radius:50%;
+  background:var(--button-bg);
+  box-shadow:0 0 0 2px rgba(2,132,199,.12);
+}
+
   input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{cursor:pointer;opacity:.7}
   input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(2,132,199,.12)}
   label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin:0 0 5px}
   h1,h2,p{margin:0}
-  .container{max-width:1500px;width:100%;margin:0 auto;background:var(--panel);padding:25px;border-radius:12px;box-shadow:var(--shadow)}
+  .container{max-width:1400px;width:100%;margin:0 auto;background:var(--panel);padding:25px;border-radius:12px;box-shadow:10px 10px 30px rgba(0,0,0,.15);box-sizing:border-box;transition:background .3s}
   .header-area{display:flex;justify-content:space-between;align-items:center;gap:14px;border-bottom:2px solid var(--line);padding-bottom:10px;margin-bottom:15px}
   .header-left{display:flex;align-items:center;gap:14px;min-width:0}
   .header-left h1{font-size:20px;white-space:nowrap}
@@ -85,16 +129,26 @@
   .control-block{min-width:0}
   .control-block.ratio{flex:0 0 170px}
   .control-block.size{flex:0 0 135px}
-  .control-block.apply{flex:0 0 auto}
+  .control-block.apply{flex:0 1 auto;min-width:150px;display:flex;align-items:flex-end;justify-content:flex-start}
   .resolution-row{display:flex;align-items:flex-end;gap:8px;flex:1 1 320px;min-width:280px}
   .resolution-row button{white-space:nowrap}
   .resolution-label{display:flex;align-items:center;justify-content:center;min-width:175px;min-height:35px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--sub);font-weight:800;font-size:12px;font-variant-numeric:tabular-nums}
-  .asset-grid{display:grid;grid-template-columns:1.2fr 1fr auto;gap:10px;align-items:end}
-  .export-row{display:grid;grid-template-columns:minmax(220px,1fr) auto minmax(0,2fr);align-items:center;gap:8px;width:100%;margin-top:-2px}
+  .asset-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:10px;align-items:end}
+  .asset-grid > div{min-width:0}
+  .asset-grid input[type=file]{min-width:0;display:block;box-sizing:border-box}
+  .asset-grid > div:last-child{display:flex;align-items:flex-end;min-width:0}
+  .asset-grid > div:last-child button{flex:1 1 auto;min-width:190px;width:100%}
+  .export-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));align-items:end;gap:8px;width:100%;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+  .export-frame-count{display:flex;flex-direction:column;gap:5px;min-width:0}
+  .export-frame-count.is-disabled{opacity:.45}
   .export-row .custom-select-wrapper{width:100%;min-width:0}
   .export-row button{min-width:150px}
   .export-row .export-format-label{display:flex;flex-direction:column;gap:5px;min-width:0}
+  .export-row .status-line{min-width:0}
   .animation-row{display:flex;align-items:flex-end;gap:8px;width:100%;flex-wrap:wrap}
+  .animation-row .frame-block{display:flex;align-items:flex-end;gap:8px;flex:1 1 420px;min-width:280px}
+  .animation-row .frame-number{flex:0 0 88px}
+  .animation-row .frame-range{flex:1 1 240px;margin-bottom:7px}
   .animation-row .speed-block{display:flex;align-items:flex-end;gap:8px;flex:1 1 320px;min-width:260px}
   .animation-row .speed-number{flex:0 0 88px}
   .animation-row .speed-range{flex:1 1 180px;margin-bottom:7px}
@@ -138,6 +192,7 @@
   .card h2{font-size:13px;margin-bottom:9px}
   .editor-card-header{display:flex;align-items:center;justify-content:space-between;gap:8px}
   .btn-row{display:flex;gap:7px;flex-wrap:wrap}
+  .btn-row > button{flex:0 0 auto;min-width:108px}
   .layer-list{display:grid;gap:7px;max-height:320px;overflow:auto;padding-right:1px}
   .layer{display:grid;grid-template-columns:28px minmax(0,1fr) auto;align-items:center;gap:8px;padding:8px;border:1px solid var(--line);border-radius:8px;cursor:pointer;background:var(--item);transition:border-color .2s,background .2s}
   .layer:hover{background:var(--sub)}
@@ -166,8 +221,6 @@
     .header-left{flex-direction:column;align-items:flex-start;gap:7px}
     #customTitleInput{width:min(320px,45vw)}
     .layout-grid{grid-template-columns:minmax(0,1.2fr) minmax(320px,1fr)}
-    .asset-grid{grid-template-columns:1fr 1fr}
-    .asset-grid > :last-child{grid-column:1 / -1}
   }
   @media(max-width:900px){
     .layout-grid{grid-template-columns:1fr}
@@ -180,18 +233,17 @@
     .header-left{width:100%}
     #customTitleInput{width:100%;min-width:0}
     .header-actions{width:100%;justify-content:stretch}
-    .export-row{grid-template-columns:1fr 1fr;align-items:stretch}
-    .export-row .export-format-label{grid-column:1 / -1}
-    .export-row button{min-width:0;width:100%}
-    .export-row .status-line{grid-column:1 / -1}
+    .export-row{grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));align-items:stretch}
+    .export-row button{min-width:150px;width:100%}
     .control-row{display:grid;grid-template-columns:1fr 1fr}
     .control-block.ratio{grid-column:1 / -1;width:100%}
     .control-block.size{width:100%}
     .control-block.apply{grid-column:1 / -1;width:100%}
     .resolution-row{grid-column:1 / -1;min-width:0;width:100%;display:grid;grid-template-columns:1fr 1.2fr 1fr}
     .resolution-label{min-width:0}
-    .asset-grid{grid-template-columns:1fr}
-    .asset-grid > :last-child{grid-column:auto}
+    .asset-grid > div:last-child{width:100%}
+    .btn-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,108px),1fr))}
+    .btn-row > button{width:100%;min-width:108px}
     .animation-row{align-items:stretch}
     .animation-row .speed-block{flex-direction:row;align-items:flex-end;min-width:0;width:100%}
     .window-header{align-items:flex-start;flex-direction:column}
@@ -208,7 +260,7 @@
 <div class="container">
   <header class="header-area">
     <div class="header-left">
-      <h1>Image Layer Composer</h1>
+      <h1>TextImageEditer_Ver.1</h1>
       <div class="custom-title-group">
         <label for="customTitleInput">編集名：</label>
         <input id="customTitleInput" type="text" placeholder="ブラウザのタブ名を変更">
@@ -242,14 +294,13 @@
         <label for="canvasHeight">高さ（px）</label>
         <input id="canvasHeight" type="number" min="1" max="12000" value="1080">
       </div>
-      <div class="control-block apply">
-        <label>&nbsp;</label>
-        <button id="applyCanvas" class="primary">キャンバスを適用</button>
-      </div>
       <div class="resolution-row">
         <button id="resolutionDown" type="button">画素を下降</button>
         <div id="resolutionLabel" class="resolution-label">FHD 1920 × 1080</div>
         <button id="resolutionUp" type="button">画素を上昇</button>
+      </div>
+      <div class="control-block apply">
+        <button id="applyCanvas" class="primary">キャンバスを適用</button>
       </div>
     </div>
 
@@ -262,6 +313,10 @@
           <option value="png">PNG</option>
           <option value="jpeg">JPEG</option>
         </select>
+      </div>
+      <div id="gifFrameCountBlock" class="export-frame-count">
+        <label for="gifExportFrames">GIFフレーム数</label>
+        <input id="gifExportFrames" type="number" min="2" max="900" step="1" value="30" inputmode="numeric">
       </div>
       <button id="exportButton" class="primary" disabled>書き出す</button>
       <span id="exportStatus" class="tip status-line"></span>
@@ -279,10 +334,10 @@
           <button id="zoomOut" aria-label="ズームアウト">−</button>
           <div class="zoom-controls">
             <div class="unit-input">
-              <input id="zoomNumber" type="number" min="5" max="100" step="1" value="100" aria-label="ズーム倍率を数値入力">
+              <input id="zoomNumber" type="number" min="5" max="100" step="1" value="50" aria-label="ズーム倍率を数値入力">
               <span class="unit">%</span>
             </div>
-            <input id="zoomRange" type="range" min="5" max="100" step="1" value="100" aria-label="ズーム倍率スライダー">
+            <input id="zoomRange" type="range" min="5" max="100" step="1" value="50" aria-label="ズーム倍率スライダー">
           </div>
           <button id="zoomIn" aria-label="ズームイン">＋</button>
           <span class="window-hint">上が前面、下が背面。キャンバス上で選択レイヤーをドラッグできます。</span>
@@ -320,15 +375,23 @@
           </div>
 
           <div class="animation-row" style="margin-top:10px">
-            <button id="gifPlay" class="primary">再生中</button>
+            <button id="gifPlay" class="primary">停止</button>
             <button id="gifToStart">先頭へ</button>
+            <div class="frame-block">
+              <label class="no-wrap" for="gifFrameNumber">再生中のフレーム</label>
+              <div class="unit-input frame-number">
+                <input id="gifFrameNumber" type="number" min="1" max="1" step="1" value="1" inputmode="numeric" aria-label="再生中のフレームを数値入力">
+                <span class="unit">F</span>
+              </div>
+              <input id="gifFrameRange" class="frame-range" type="range" min="1" max="1" step="1" value="1" aria-label="再生中のフレームを操作">
+            </div>
             <div class="speed-block">
               <label class="no-wrap" for="gifSpeedNumber">再生速度</label>
               <div class="unit-input speed-number">
                 <input id="gifSpeedNumber" type="number" min="1" max="1000" step="1" value="100" aria-label="再生速度を数値入力">
                 <span class="unit">%</span>
               </div>
-              <input id="gifSpeed" class="speed-range" type="range" min="25" max="200" step="1" value="100" aria-label="再生速度スライダー">
+              <input id="gifSpeed" class="speed-range" type="range" min="25" max="400" step="1" value="100" aria-label="再生速度スライダー">
             </div>
             <span id="gifStatus" class="tip status-line">静止画を読み込むとレイヤーとして追加できます。GIFはアニメーションとして読み込みます。</span>
           </div>
@@ -408,12 +471,6 @@
           <p class="tip" style="margin-top:9px">回転と不透明度は、スライダー外の値も数値入力で直接指定できます。</p>
         </section>
 
-        <section class="card">
-          <h2>その他</h2>
-          <div class="footer-actions">
-            <button id="reset" class="danger">すべてリセット</button>
-          </div>
-        </section>
       </div>
     </aside>
   </div>
@@ -430,6 +487,8 @@ const els = {
   customTitleInput: document.getElementById('customTitleInput'),
   themeToggle: document.getElementById('themeToggle'),
   exportFormat: document.getElementById('exportFormat'),
+  gifExportFrames: document.getElementById('gifExportFrames'),
+  gifFrameCountBlock: document.getElementById('gifFrameCountBlock'),
   exportButton: document.getElementById('exportButton'),
   exportStatus: document.getElementById('exportStatus'),
   canvasPreset: document.getElementById('canvasPreset'),
@@ -444,6 +503,8 @@ const els = {
   addAssetLayer: document.getElementById('addAssetLayer'),
   gifPlay: document.getElementById('gifPlay'),
   gifToStart: document.getElementById('gifToStart'),
+  gifFrameNumber: document.getElementById('gifFrameNumber'),
+  gifFrameRange: document.getElementById('gifFrameRange'),
   gifSpeed: document.getElementById('gifSpeed'),
   gifSpeedNumber: document.getElementById('gifSpeedNumber'),
   gifStatus: document.getElementById('gifStatus'),
@@ -474,7 +535,6 @@ const els = {
   center: document.getElementById('center'),
   duplicateLayerBtn: document.getElementById('duplicateLayerBtn'),
   deleteLayerBtn: document.getElementById('deleteLayerBtn'),
-  reset: document.getElementById('reset')
 };
 
 function setupCustomSelect(selectElement){
@@ -768,11 +828,12 @@ async function decodeImageFile(file){
 }
 function isGifFile(file){ return file.type === 'image/gif' || /\.gif$/i.test(file.name); }
 function createAssetId(){ return nextAssetId++; }
-function populateAssetPool(){
+function populateAssetPool(preferredId=null){
+  const previousId = preferredId ?? els.assetPoolSelect.value;
   els.assetPoolSelect.innerHTML = '';
   const placeholder = document.createElement('option');
-  placeholder.value=''; placeholder.disabled=true; placeholder.selected=true;
-  placeholder.textContent = assetPool.length ? '-- ロード済み素材 --' : '-- 素材を読み込んでください --';
+  placeholder.value=''; placeholder.disabled=true;
+  placeholder.textContent = assetPool.length ? '-- ロード済み素材 --' : '-- ファイルをロードしてください --';
   els.assetPoolSelect.appendChild(placeholder);
   assetPool.forEach(asset=>{
     const option = document.createElement('option');
@@ -780,7 +841,14 @@ function populateAssetPool(){
     option.textContent = `${asset.name}${asset.kind==='gif'?` (${asset.frames.length}F)`:''}`;
     els.assetPoolSelect.appendChild(option);
   });
-  els.addAssetLayer.disabled = true;
+  const selectedAsset = assetPool.find(asset=>String(asset.id)===String(previousId)) || assetPool[0] || null;
+  if(selectedAsset){
+    els.assetPoolSelect.value = String(selectedAsset.id);
+    els.addAssetLayer.disabled = false;
+  }else{
+    els.assetPoolSelect.value = '';
+    els.addAssetLayer.disabled = true;
+  }
   els.assetPoolSelect.dispatchEvent(new Event('optionsupdated'));
 }
 function getAsset(assetId){ return assetPool.find(a=>String(a.id)===String(assetId)) || null; }
@@ -823,18 +891,21 @@ els.assetFile.addEventListener('change',async()=>{
   const files = Array.from(els.assetFile.files || []);
   if(!files.length) return;
   let loaded = 0, failed = [];
+  let firstLoadedId = null;
   els.gifStatus.textContent = `${files.length}件の素材をロード中…`;
   for(const file of files){
     try{
       const gif = isGifFile(file);
       const decoded = gif ? await decodeGifFile(file) : await decodeImageFile(file);
-      assetPool.push({id:createAssetId(),name:file.name,kind:gif?'gif':'static',...decoded});
+      const newAsset = {id:createAssetId(),name:file.name,kind:gif?'gif':'static',...decoded};
+      assetPool.push(newAsset);
+      if(firstLoadedId===null) firstLoadedId=newAsset.id;
       loaded += 1;
     }catch(err){
       failed.push(`${file.name}: ${err?.message || err}`);
     }
   }
-  populateAssetPool();
+  populateAssetPool(firstLoadedId ?? els.assetPoolSelect.value);
   els.assetFile.value = '';
   els.gifStatus.textContent = failed.length
     ? `${loaded}件ロード / ${failed.length}件失敗`
@@ -845,9 +916,11 @@ els.addAssetLayer.addEventListener('click',()=>{
   const id = els.assetPoolSelect.value;
   if(!id) return;
   addAssetAsLayer(id);
-  els.assetPoolSelect.value='';
+  // 追加後も同じ素材を選択状態のまま保持する。
+  // これにより同一素材を続けて複数レイヤーへ追加できる。
+  els.assetPoolSelect.value = String(id);
+  els.addAssetLayer.disabled = false;
   els.assetPoolSelect.dispatchEvent(new Event('optionsupdated'));
-  els.addAssetLayer.disabled=true;
 });
 
 function getSelectedLayer(){ return layers.find(l=>l.id===selectedLayerId) || null; }
@@ -864,7 +937,57 @@ function getFrameSourceAt(layer,time){
 }
 function animationTotalDuration(){
   const durations = layers.filter(l=>l.frames?.length>1).map(l=>l.totalDuration);
-  return Math.max(1,...durations);
+  const entranceDurations = layers.filter(l=>l.inAnimType!=='none').map(l=>getEntranceAnimationDurationMs(l));
+  return Math.max(1000,...durations, ...entranceDurations);
+}
+function animationFrameCount(){
+  // プレビュー用タイムラインは30fpsで統一し、GIF素材がなくても
+  // 出現アニメーション付き静止画をフレーム単位で確認できるようにします。
+  return Math.max(1,Math.ceil(animationTotalDuration()/1000*30));
+}
+function normalizeAnimationTime(time){
+  const total=animationTotalDuration();
+  return ((Number(time)||0)%total+total)%total;
+}
+function animationFrameFromTime(time){
+  const count=animationFrameCount();
+  if(count<=1) return 1;
+  const t=normalizeAnimationTime(time);
+  return Math.min(count,Math.max(1,Math.floor((t/Math.max(1,animationTotalDuration()))*count)+1));
+}
+function animationTimeFromFrame(frame){
+  const count=animationFrameCount();
+  if(count<=1) return 0;
+  const f=Math.max(1,Math.min(count,Math.round(Number(frame)||1)));
+  // 1フレーム目はタイムライン先頭、以降はフレーム境界上へ移動します。
+  return ((f-1)/Math.max(1,count-1))*animationTotalDuration();
+}
+
+function animationPreviewFrameFromTime(time){
+  const fps=30;
+  return Math.max(0, Math.floor(Math.max(0,Number(time)||0) / 1000 * fps));
+}
+
+function getEntranceAnimationDurationMs(layer){
+  if(!layer || layer.inAnimType==='none') return 0;
+  // 出現アニメーションは「15フレーム × 再生速度」で長さを決めます。
+  // 30fpsを基準とし、再生速度100%なら15フレーム(0.5秒)。
+  const speed=Math.max(0.01,Number(animationSpeed)||1);
+  const frames=Math.max(1,Math.round(15*speed));
+  return frames*(1000/30);
+}
+function syncAnimationFrameControls(){
+  const count=animationFrameCount();
+  els.gifFrameNumber.min=1;
+  els.gifFrameNumber.max=count;
+  els.gifFrameRange.min=1;
+  els.gifFrameRange.max=count;
+  const frame=animationFrameFromTime(animationTime);
+  els.gifFrameNumber.value=frame;
+  els.gifFrameRange.value=frame;
+  const hasFrameControl=hasAnimatedLayer();
+  els.gifFrameNumber.disabled=!hasFrameControl;
+  els.gifFrameRange.disabled=!hasFrameControl;
 }
 function hasEffectAnimation(){ return layers.some(l=>l.inAnimType!=='none' || l.loopAnimType!=='none'); }
 function hasAnimatedLayer(){ return layers.some(l=>l.frames?.length>1) || hasEffectAnimation(); }
@@ -1069,13 +1192,13 @@ function easeOutBounce(x){
   return n1*(x-=2.625/d1)*x+0.984375;
 }
 function getLayerAnimationState(layer,time,nowMs){
-  const total=Math.max(1,Number(layer?.timelineDuration)||animationTotalDuration());
-  const current=(Number(time)||0);
-  const timeInCycle=((current%total)+total)%total;
+  const current=Math.max(0,Number(time)||0);
+  // GIF素材側のフレームは getFrameSourceAt() 内で個別にループします。
+  // 出現アニメーションはグローバルな再生ループには依存せず、先頭から一度だけ進みます。
   let inAlpha=1,inScaleX=1,inScaleY=1,inOffsetX=0,inOffsetY=0;
-  const inDuration=Math.max(0,Number(layer?.inAnimDuration)||0);
-  if(inDuration>0 && layer?.inAnimType!=='none' && timeInCycle<inDuration){
-    const progress=Math.min(timeInCycle/inDuration,1);
+  const inDuration=getEntranceAnimationDurationMs(layer);
+  if(inDuration>0 && layer?.inAnimType!=='none' && current<inDuration){
+    const progress=Math.min(current/inDuration,1);
     const easeP=easeOutCubic(progress);
     switch(layer.inAnimType){
       case 'fade': inAlpha*=easeP; break;
@@ -1155,6 +1278,7 @@ function render(time=animationTime){
   layers.forEach(layer=>drawLayer(layer,ctx,time,nowMs));
   drawSelection();
   els.exportButton.disabled = layers.length===0;
+  syncAnimationFrameControls();
   renderLayerStatus();
 }
 
@@ -1253,16 +1377,32 @@ function setAnimationSpeedFromValue(value){
   const percent=Math.max(1,Math.min(1000,n));
   animationSpeed=percent/100;
   els.gifSpeedNumber.value=percent;
-  els.gifSpeed.value=Math.max(25,Math.min(200,percent));
+  els.gifSpeed.value=Math.max(25,Math.min(400,percent));
+}
+function setAnimationFrameFromValue(value){
+  if(!layers.some(l=>l.frames?.length>1)) return;
+  const count=animationFrameCount();
+  const frame=Math.max(1,Math.min(count,Math.round(Number(value)||1)));
+  animationTime=animationTimeFromFrame(frame);
+  lastAnimationTimestamp=performance.now();
+  render();
 }
 els.gifPlay.addEventListener('click',()=>{
   animationPlaying=!animationPlaying;
-  els.gifPlay.textContent=animationPlaying?'再生中':'一時停止';
+  els.gifPlay.textContent=animationPlaying?'停止':'再生';
   lastAnimationTimestamp=performance.now();
 });
-els.gifToStart.addEventListener('click',()=>{animationTime=0;render();});
+els.gifToStart.addEventListener('click',()=>{
+  animationTime=0;
+  lastAnimationTimestamp=performance.now();
+  render();
+});
+els.gifFrameRange.addEventListener('input',()=>setAnimationFrameFromValue(els.gifFrameRange.value));
+els.gifFrameNumber.addEventListener('input',()=>setAnimationFrameFromValue(els.gifFrameNumber.value));
+els.gifFrameNumber.addEventListener('change',()=>setAnimationFrameFromValue(els.gifFrameNumber.value));
 els.gifSpeed.addEventListener('input',()=>setAnimationSpeedFromValue(els.gifSpeed.value));
 els.gifSpeedNumber.addEventListener('input',()=>setAnimationSpeedFromValue(els.gifSpeedNumber.value));
+els.gifSpeedNumber.addEventListener('change',()=>setAnimationSpeedFromValue(els.gifSpeedNumber.value));
 
 function downloadBlob(blob,name){
   if(!blob) return;
@@ -1296,46 +1436,25 @@ function renderExportFrame(targetCtx,time){
   layers.forEach(layer=>drawLayer(layer,targetCtx,time,time));
 }
 
-function buildExportTimeline(total){
+function buildExportTimeline(total, frameCount=30){
   const duration=Math.max(1,Number(total)||1);
-  const boundaries=new Set([0,duration]);
-  if(hasEffectAnimation()){
-    const fpsStep=1000/30;
-    for(let t=fpsStep;t<duration;t+=fpsStep) boundaries.add(Math.round(t));
+  const count=Math.max(1,Math.min(900,Math.round(Number(frameCount)||1)));
+  if(count===1) return [{start:0,delay:Math.max(20,Math.round(duration))}];
+
+  // 指定したフレーム数に合わせて均等サンプリングします。
+  // 各フレームの表示時間の合計は元のアニメーション時間と一致します。
+  const step=duration/count;
+  const timeline=[];
+  for(let i=0;i<count;i++){
+    const start=Math.min(duration-1,Math.round(i*step));
+    const next=i===count-1 ? duration : Math.round((i+1)*step);
+    const delay=Math.max(20,next-start);
+    timeline.push({start,delay});
   }
-  layers.forEach(layer=>{
-    if(!layer.frames?.length || layer.frames.length<=1) return;
-    const period=Number(layer.totalDuration)||0;
-    if(period<=0) return;
-    let cycleStart=0;
-    while(cycleStart<duration){
-      let t=0;
-      for(const delay of layer.frameDurations){
-        t+=normalizeDelay(delay);
-        const point=cycleStart+t;
-        if(point>0 && point<duration) boundaries.add(point);
-      }
-      cycleStart+=period;
-    }
-  });
-  let times=[...boundaries].filter(Number.isFinite).sort((a,b)=>a-b);
-  if(times.length<2) return [{start:0,delay:Math.max(20,Math.round(duration))}];
-  let intervals=[];
-  for(let i=0;i<times.length-1;i++){
-    const delay=times[i+1]-times[i];
-    if(delay>0) intervals.push({start:times[i],delay});
-  }
-  if(intervals.length>900){
-    const factor=Math.ceil(intervals.length/900);
-    const merged=[];
-    for(let i=0;i<intervals.length;i+=factor){
-      let delay=0;
-      for(let j=i;j<Math.min(intervals.length,i+factor);j++) delay+=intervals[j].delay;
-      merged.push({start:intervals[i].start,delay});
-    }
-    intervals=merged;
-  }
-  return intervals.map(item=>({...item,delay:Math.max(20,Math.round(item.delay))}));
+  const totalDelay=timeline.reduce((sum,item)=>sum+item.delay,0);
+  const correction=Math.round(duration)-totalDelay;
+  timeline[timeline.length-1].delay=Math.max(20,timeline[timeline.length-1].delay+correction);
+  return timeline;
 }
 
 function exportStill(format){
@@ -1362,7 +1481,9 @@ async function exportGif(mode){
   if(!layers.length) return;
   if(typeof window.GIF==='undefined') throw new Error('GIFエンコーダーが読み込まれていません。ネットワーク接続を確認してください。');
   const total=animationTotalDuration();
-  const timeline=buildExportTimeline(total);
+  const requestedFrames=Math.max(2,Math.min(900,Math.round(Number(els.gifExportFrames.value)||30)));
+  els.gifExportFrames.value=requestedFrames;
+  const timeline=buildExportTimeline(total,requestedFrames);
   const workerScript=await getGifWorkerScript();
   const highQuality=mode==='gif-quality';
   const gif=new window.GIF({
@@ -1415,6 +1536,15 @@ async function exportGif(mode){
 
 async function runExport(){
   if(!layers.length) return;
+
+  // 書き出し開始時は必ずタイムラインを先頭へ戻します。
+  // プレビュー上の再生位置に関係なく、常に1フレーム目から書き出します。
+  animationTime=0;
+  animationPlaying=false;
+  els.gifPlay.textContent='再生';
+  syncControls();
+  render();
+
   els.exportButton.disabled=true;
   els.exportStatus.textContent='書き出し準備中…';
   try{
@@ -1433,6 +1563,18 @@ async function runExport(){
     }
   }
 }
+function updateGifExportOptions(){
+  const isGif=els.exportFormat.value==='gif-compatible' || els.exportFormat.value==='gif-quality';
+  els.gifExportFrames.disabled=!isGif;
+  els.gifFrameCountBlock.classList.toggle('is-disabled',!isGif);
+}
+els.exportFormat.addEventListener('change',updateGifExportOptions);
+els.gifExportFrames.addEventListener('change',()=>{
+  const value=Math.max(2,Math.min(900,Math.round(Number(els.gifExportFrames.value)||30)));
+  els.gifExportFrames.value=value;
+});
+updateGifExportOptions();
+
 els.exportButton.addEventListener('click',runExport);
 
 function applyTheme(theme){
@@ -1452,41 +1594,19 @@ els.themeToggle.addEventListener('click',()=>{
 
 els.customTitleInput.addEventListener('input',()=>{
   const title=els.customTitleInput.value.trim();
-  document.title=title?`${title} | Image Layer Composer`:'Image Layer Composer';
+  document.title=title?`${title} | TextImageEditer_Ver.1`:'TextImageEditer_Ver.1';
 });
 
-function resetAll(){
-  layers=[];
-  assetPool=[];
-  selectedLayerId=null;
-  nextLayerId=1;
-  nextAssetId=1;
-  animationTime=0;
-  animationPlaying=true;
-  els.gifPlay.textContent='再生中';
-  els.assetFile.value='';
-  els.assetPoolSelect.value='';
-  els.assetPoolSelect.dispatchEvent(new Event('optionsupdated'));
-  els.addAssetLayer.disabled=true;
-  els.exportStatus.textContent='';
-  els.canvasPreset.value='16:9';
-  els.canvasPreset.dispatchEvent(new Event('optionsupdated'));
-  resolutionTierIndex=2;
-  customCanvas=false;
-  resizeCanvas(1920,1080,{scaleLayers:false});
-  updateResolutionUI();
-  populateAssetPool();
-  renderLayerUI();
-  syncControls();
-  render();
-}
-els.reset.addEventListener('click',resetAll);
+
 
 function tick(now){
   const delta=Math.max(0,now-lastAnimationTimestamp);
   lastAnimationTimestamp=now;
   if(animationPlaying && hasAnimatedLayer()){
-    animationTime=(animationTime+delta*animationSpeed)%animationTotalDuration();
+    // animationTime は累積させます。
+    // これにより出現アニメーションは一度だけ実行され、その後は表示状態を維持します。
+    // GIF素材のフレームループは getFrameSourceAt() 側で独立して処理されます。
+    animationTime += delta*animationSpeed;
   }
   render();
   requestAnimationFrame(tick);
@@ -1499,7 +1619,7 @@ els.canvasWidth.value='1920';
 els.canvasHeight.value='1080';
 customCanvas=false;
 resolutionTierIndex=2;
-setZoomFromValue(100);
+setZoomFromValue(50);
 setAnimationSpeedFromValue(100);
 updateResolutionUI();
 populateAssetPool();
