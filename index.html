@@ -543,6 +543,7 @@ const els = {
   layerUpBtn: document.getElementById('layerUpBtn'),
   layerDownBtn: document.getElementById('layerDownBtn'),
   layerBottomBtn: document.getElementById('layerBottomBtn'),
+  editorContent: document.querySelector('.editor-content'),
   selectedLayerTitle: document.getElementById('selectedLayerTitle'),
   inAnim: document.getElementById('inAnim'),
   loopAnim: document.getElementById('loopAnim'),
@@ -572,6 +573,13 @@ function setEditorTab(name,animate=false){
   els.tabLayers.setAttribute('aria-selected',String(isLayers));
   els.tabImageAdjust.setAttribute('aria-selected',String(!isLayers));
   els.panelImageAdjust.classList.remove('auto-enter');
+  if(!isLayers){
+    requestAnimationFrame(()=>{
+      if(els.editorContent){
+        els.editorContent.scrollTo({top:0,behavior:'smooth'});
+      }
+    });
+  }
   if(animate && !isLayers){
     void els.panelImageAdjust.offsetWidth;
     els.panelImageAdjust.classList.add('auto-enter');
