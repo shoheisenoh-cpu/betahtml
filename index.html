@@ -194,6 +194,12 @@ input[type=range]::-moz-range-thumb{
   .card:last-child{margin-bottom:0}
   .card h2{font-size:13px;margin-bottom:9px}
   .editor-card-header{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .editor-tabs{display:flex;gap:6px;border-bottom:1px solid var(--line);margin:-2px 0 10px;padding:0 0 6px;overflow-x:auto}
+  .editor-tab{flex:0 0 auto;min-width:132px;padding:8px 12px;border:1px solid var(--line);border-radius:9px;background:var(--button-bg);color:var(--text);font-size:12px;font-weight:800;cursor:pointer;transition:background .15s,color .15s,border-color .15s,box-shadow .15s}
+  .editor-tab:hover{background:var(--button-hover);border-color:var(--accent)}
+  .editor-tab.active{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 0 0 2px rgba(2,132,199,.16)}
+  .editor-tabpanel{display:none}
+  .editor-tabpanel.active{display:block}
   .btn-row{display:flex;gap:7px;flex-wrap:wrap}
   .btn-row > button{flex:0 0 auto;min-width:108px}
   .layer-list{display:grid;gap:7px;max-height:320px;overflow:auto;padding-right:1px}
@@ -357,7 +363,12 @@ input[type=range]::-moz-range-thumb{
         <span class="tip">レイヤーと選択画像の調整</span>
       </div>
       <div class="editor-content">
-        <section class="card">
+        <div class="editor-tabs" role="tablist" aria-label="編集画面の切り替え">
+          <button type="button" class="editor-tab active" id="tabLayers" role="tab" aria-selected="true" aria-controls="panelLayers">レイヤー</button>
+          <button type="button" class="editor-tab" id="tabImageAdjust" role="tab" aria-selected="false" aria-controls="panelImageAdjust">選択画像の調整</button>
+        </div>
+
+        <section class="card editor-tabpanel active" id="panelLayers" role="tabpanel" aria-labelledby="tabLayers">
           <div class="editor-card-header">
             <h2>レイヤー</h2>
             <span id="layerStatus" class="tip">0 レイヤー</span>
@@ -408,7 +419,7 @@ input[type=range]::-moz-range-thumb{
           <div id="layerList" class="layer-list" style="margin-top:10px"></div>
         </section>
 
-        <section class="card">
+        <section class="card editor-tabpanel" id="panelImageAdjust" role="tabpanel" aria-labelledby="tabImageAdjust">
           <h2>選択画像の調整</h2>
           <div id="selectedLayerTitle" class="selected-layer-title">選択なし</div>
           <div class="controls">
@@ -488,6 +499,10 @@ if (!ctx) throw new Error('Canvas 2Dコンテキストを初期化できませ�
 
 const els = {
   customTitleInput: document.getElementById('customTitleInput'),
+  tabLayers: document.getElementById('tabLayers'),
+  tabImageAdjust: document.getElementById('tabImageAdjust'),
+  panelLayers: document.getElementById('panelLayers'),
+  panelImageAdjust: document.getElementById('panelImageAdjust'),
   themeToggle: document.getElementById('themeToggle'),
   exportFormat: document.getElementById('exportFormat'),
   gifExportFrames: document.getElementById('gifExportFrames'),
@@ -539,6 +554,18 @@ const els = {
   duplicateLayerBtn: document.getElementById('duplicateLayerBtn'),
   deleteLayerBtn: document.getElementById('deleteLayerBtn'),
 };
+
+function setEditorTab(name){
+  const isLayers=name==='layers';
+  els.tabLayers.classList.toggle('active',isLayers);
+  els.tabImageAdjust.classList.toggle('active',!isLayers);
+  els.panelLayers.classList.toggle('active',isLayers);
+  els.panelImageAdjust.classList.toggle('active',!isLayers);
+  els.tabLayers.setAttribute('aria-selected',String(isLayers));
+  els.tabImageAdjust.setAttribute('aria-selected',String(!isLayers));
+}
+els.tabLayers.addEventListener('click',()=>setEditorTab('layers'));
+els.tabImageAdjust.addEventListener('click',()=>setEditorTab('image'));
 
 function setupCustomSelect(selectElement){
   if(!selectElement) return;
