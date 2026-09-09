@@ -190,16 +190,18 @@ input[type=range]::-moz-range-thumb{
   #canvas{display:block;flex:0 0 auto;max-width:none;max-height:none;width:960px;height:540px;border:1px solid var(--canvas-border);border-radius:8px;background-color:var(--checker-dark);background-image:linear-gradient(45deg,var(--checker-light) 25%,transparent 25%),linear-gradient(-45deg,var(--checker-light) 25%,transparent 25%),linear-gradient(45deg,transparent 75%,var(--checker-light) 75%),linear-gradient(-45deg,transparent 75%,var(--checker-light) 75%);background-size:24px 24px;background-position:0 0,0 12px,12px -12px,-12px 0;box-shadow:0 8px 24px rgba(0,0,0,.06);touch-action:none}
   .editor-window{display:flex;flex-direction:column;min-height:0}
   .editor-content{padding:12px;overflow:auto;max-height:calc(100vh - 130px)}
-  .card{border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px;background:var(--sub)}
+  .card{border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px;background:var(--sub);position:relative;z-index:1;border-top-left-radius:4px}
   .card:last-child{margin-bottom:0}
   .card h2{font-size:13px;margin-bottom:9px}
   .editor-card-header{display:flex;align-items:center;justify-content:space-between;gap:8px}
-  .editor-tabs{display:flex;gap:6px;border-bottom:1px solid var(--line);margin:-2px 0 10px;padding:0 0 6px;overflow-x:auto}
-  .editor-tab{flex:0 0 auto;min-width:132px;padding:8px 12px;border:1px solid var(--line);border-radius:9px;background:var(--button-bg);color:var(--text);font-size:12px;font-weight:800;cursor:pointer;transition:background .15s,color .15s,border-color .15s,box-shadow .15s}
-  .editor-tab:hover{background:var(--button-hover);border-color:var(--accent)}
-  .editor-tab.active{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 0 0 2px rgba(2,132,199,.16)}
+  .editor-tabs{display:flex;gap:4px;margin:0 0 0 8px;padding:0;overflow-x:auto;position:relative;z-index:2}
+  .editor-tab{flex:0 0 auto;min-width:132px;padding:10px 16px 11px;border:1px solid var(--line);border-bottom:none;border-radius:12px 12px 0 0;background:var(--item);color:var(--muted);font-size:13px;font-weight:800;cursor:pointer;transition:background .15s,color .15s;margin-bottom:-1px}
+  .editor-tab:hover{background:var(--button-bg);color:var(--text)}
+  .editor-tab.active{background:var(--sub);color:var(--accent);border-color:var(--line);box-shadow:none}
   .editor-tabpanel{display:none}
   .editor-tabpanel.active{display:block}
+  .editor-tabpanel.auto-enter{animation:editorPanelEnter .22s ease-out both}
+  @keyframes editorPanelEnter{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:translateX(0)}}
   .btn-row{display:flex;gap:7px;flex-wrap:wrap}
   .btn-row > button{flex:0 0 auto;min-width:108px}
   .layer-list{display:grid;gap:7px;max-height:320px;overflow:auto;padding-right:1px}
@@ -555,7 +557,7 @@ const els = {
   deleteLayerBtn: document.getElementById('deleteLayerBtn'),
 };
 
-function setEditorTab(name){
+function setEditorTab(name,animate=false){
   const isLayers=name==='layers';
   els.tabLayers.classList.toggle('active',isLayers);
   els.tabImageAdjust.classList.toggle('active',!isLayers);
@@ -563,6 +565,18 @@ function setEditorTab(name){
   els.panelImageAdjust.classList.toggle('active',!isLayers);
   els.tabLayers.setAttribute('aria-selected',String(isLayers));
   els.tabImageAdjust.setAttribute('aria-selected',String(!isLayers));
+  els.panelImageAdjust.classList.remove('auto-enter');
+  if(animate && !isLayers){
+    void els.panelImageAdjust.offsetWidth;
+    els.panelImageAdjust.classList.add('auto-enter');
+  }
+}
+function selectLayerAndOpenAdjust(layerId){
+  selectedLayerId=layerId;
+  renderLayerUI();
+  syncControls();
+  render();
+  setEditorTab('image',true);
 }
 els.tabLayers.addEventListener('click',()=>setEditorTab('layers'));
 els.tabImageAdjust.addEventListener('click',()=>setEditorTab('image'));
@@ -1050,7 +1064,7 @@ function renderLayerUI(){
     actions.appendChild(visibility);
     item.append(badge,info,actions);
     item.addEventListener('click',()=>{
-      selectedLayerId=layer.id; renderLayerUI(); syncControls(); render();
+      selectLayerAndOpenAdjust(layer.id);
     });
     els.layerList.appendChild(item);
   });
@@ -1195,7 +1209,8 @@ els.deleteLayerBtn.addEventListener('click',()=>{
 els.duplicateLayerBtn.addEventListener('click',()=>{
   const layer=getSelectedLayer(); if(!layer) return;
   const copy={...layer,id:nextLayerId++,x:layer.x+20,y:layer.y+20,frames:layer.frames,frameDurations:[...layer.frameDurations],baseW:layer.baseW,baseH:layer.baseH,zoom:layer.zoom ?? 100};
-  layers.push(copy); selectedLayerId=copy.id; renderLayerUI(); syncControls(); render();
+  layers.push(copy);
+  selectLayerAndOpenAdjust(copy.id);
 });
 function rerenderLayerOrder(){ renderLayerUI(); syncControls(); render(); }
 els.layerTopBtn.addEventListener('click',()=>{
@@ -1336,9 +1351,7 @@ canvas.addEventListener('pointerdown',event=>{
     if(!layer.visible) continue;
     if(!getFrameSourceAt(layer,animationTime)) continue;
     if(pointInsideRotatedLayer(layer,point.x,point.y)){
-      selectedLayerId=layer.id;
-      renderLayerUI();
-      syncControls();
+      selectLayerAndOpenAdjust(layer.id);
       drag={pointerId:event.pointerId,startX:point.x,startY:point.y,originX:layer.x,originY:layer.y};
       canvas.setPointerCapture(event.pointerId);
       event.preventDefault();
