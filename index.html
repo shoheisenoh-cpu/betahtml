@@ -124,9 +124,17 @@ input[type=range]::-moz-range-thumb{
   .header-left{display:flex;align-items:center;gap:14px;min-width:0}
   .header-left h1{font-size:20px;white-space:nowrap}
   .custom-title-group{display:flex;align-items:center;gap:7px;min-width:0}
+  .project-data-bar{display:inline-flex;align-items:center;justify-content:flex-start;gap:8px;width:max-content;max-width:100%;margin:0 0 12px;padding:5px 8px;border:1px solid var(--line);border-radius:9px;background:var(--sub);position:relative;z-index:1;box-sizing:border-box}
+  .project-data-group{display:flex;align-items:center;justify-content:flex-start;gap:7px;min-width:0;max-width:100%;flex-wrap:wrap}
+  .project-data-group .project-action{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;height:35px;line-height:1;white-space:nowrap}
+  .project-data-group .project-save-label{display:flex;align-items:center;gap:5px;min-height:0;padding:0 2px;color:var(--muted);font-size:12px;font-weight:700;white-space:nowrap;cursor:pointer}
+  .project-data-group .project-save-label input{margin:0;accent-color:var(--accent)}
+  .project-data-group #projectLoadFile{display:none}
+  .project-data-group .project-status{display:none}
+  #saveProjectWithAssets{accent-color:var(--accent)}
   .custom-title-group label{white-space:nowrap;margin:0}
   #customTitleInput{width:min(320px,35vw);min-width:150px}
-  .header-actions{display:flex;align-items:center;gap:7px;justify-content:flex-end;flex-wrap:wrap}
+  .header-actions{display:flex;align-items:center;gap:7px;justify-content:flex-end;flex-wrap:wrap;min-width:0}
   .control-group{display:flex;flex-direction:column;gap:10px;margin-bottom:14px}
   .control-row{display:flex;align-items:flex-end;gap:10px;width:100%;flex-wrap:wrap}
   .control-block{min-width:0}
@@ -245,7 +253,7 @@ input[type=range]::-moz-range-thumb{
     .header-area{flex-direction:column;align-items:stretch}
     .header-left{width:100%}
     #customTitleInput{width:100%;min-width:0}
-    .header-actions{width:100%;justify-content:stretch}
+    .header-actions{width:100%;justify-content:flex-end}
     .export-row{grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));align-items:stretch}
     .export-row button{min-width:150px;width:100%}
     .control-row{display:grid;grid-template-columns:1fr 1fr}
@@ -283,6 +291,18 @@ input[type=range]::-moz-range-thumb{
       <button id="themeToggle" type="button" title="ダークモード切り替え">☀ / ☽</button>
     </div>
   </header>
+
+  <div class="project-data-bar" aria-label="作業データ">
+    <div class="project-data-group">
+      <label class="project-save-label" for="saveProjectWithAssets" title="保存時に画像・GIF素材も作業データへ含める">
+        <input id="saveProjectWithAssets" type="checkbox"> 素材も保存
+      </label>
+      <button id="saveProjectButton" type="button" class="project-action">保存</button>
+      <button id="loadProjectButton" type="button" class="project-action">読み込み</button>
+      <input id="projectLoadFile" type="file" accept=".TextImageEditer.txt,text/plain" aria-label="作業データを読み込み">
+      <span id="projectDataStatus" class="project-status" aria-live="polite"></span>
+    </div>
+  </div>
 
   <section class="control-group" aria-label="共通設定">
     <div class="control-row">
@@ -515,6 +535,11 @@ const els = {
   gifExportFrames: document.getElementById('gifExportFrames'),
   gifFrameCountBlock: document.getElementById('gifFrameCountBlock'),
   exportButton: document.getElementById('exportButton'),
+  projectLoadFile: document.getElementById('projectLoadFile'),
+  loadProjectButton: document.getElementById('loadProjectButton'),
+  saveProjectWithAssets: document.getElementById('saveProjectWithAssets'),
+  saveProjectButton: document.getElementById('saveProjectButton'),
+  projectDataStatus: document.getElementById('projectDataStatus'),
   exportStatus: document.getElementById('exportStatus'),
   canvasPreset: document.getElementById('canvasPreset'),
   canvasWidth: document.getElementById('canvasWidth'),
@@ -895,6 +920,19 @@ async function decodeImageFile(file){
   }
 }
 function isGifFile(file){ return file.type === 'image/gif' || /\.gif$/i.test(file.name); }
+async function fileToDataURL(file){
+  return await new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>resolve(String(reader.result));
+    reader.onerror=()=>reject(new Error(`${file.name} の読み込みに失敗しました。`));
+    reader.readAsDataURL(file);
+  });
+}
+async function dataURLToFile(dataURL,name,mimeType='application/octet-stream'){
+  const response=await fetch(dataURL);
+  const blob=await response.blob();
+  return new File([blob],name,{type:mimeType || blob.type || 'application/octet-stream'});
+}
 function createAssetId(){ return nextAssetId++; }
 function populateAssetPool(preferredId=null){
   const previousId = preferredId ?? els.assetPoolSelect.value;
@@ -965,7 +1003,8 @@ els.assetFile.addEventListener('change',async()=>{
     try{
       const gif = isGifFile(file);
       const decoded = gif ? await decodeGifFile(file) : await decodeImageFile(file);
-      const newAsset = {id:createAssetId(),name:file.name,kind:gif?'gif':'static',...decoded};
+      const sourceDataUrl = await fileToDataURL(file);
+      const newAsset = {id:createAssetId(),name:file.name,mimeType:file.type || (gif?'image/gif':'image/*'),kind:gif?'gif':'static',sourceDataUrl,...decoded};
       assetPool.push(newAsset);
       if(firstLoadedId===null) firstLoadedId=newAsset.id;
       loaded += 1;
@@ -1667,6 +1706,133 @@ els.gifExportFrames.addEventListener('change',()=>{
 updateGifExportOptions();
 
 els.exportButton.addEventListener('click',runExport);
+
+function sanitizeProjectFileName(name){
+  const fallback='TextImageEditer_Ver.1';
+  const raw=String(name||'').trim() || fallback;
+  const cleaned=raw.replace(/[\\/:*?"<>|]/g,'_').replace(/[\u0000-\u001f]/g,'_').replace(/\s+$/g,'').replace(/^\.+$/,'').trim();
+  return `${cleaned || fallback}.TextImageEditer.txt`;
+}
+function projectBaseName(){
+  const title=String(els.customTitleInput.value||'').trim();
+  if(title) return title;
+  const imageAsset=assetPool.find(asset=>asset && asset.kind==='static' && asset.name);
+  if(imageAsset && imageAsset.name){
+    const raw=String(imageAsset.name).trim();
+    const withoutExt=raw.replace(/\.[^.\/]+$/,'');
+    return withoutExt || 'TextImageEditer_Ver.1';
+  }
+  const anyAsset=assetPool.find(asset=>asset && asset.name);
+  if(anyAsset && anyAsset.name){
+    const raw=String(anyAsset.name).trim();
+    const withoutExt=raw.replace(/\.[^.\/]+$/,'');
+    return withoutExt || 'TextImageEditer_Ver.1';
+  }
+  return 'TextImageEditer_Ver.1';
+}
+function serializeLayer(layer){
+  return {
+    id:layer.id,name:layer.name,assetId:layer.assetId,kind:layer.kind,
+    frameDurations:Array.isArray(layer.frameDurations)?[...layer.frameDurations]:[],totalDuration:Number(layer.totalDuration)||1,
+    sourceWidth:Number(layer.sourceWidth)||1,sourceHeight:Number(layer.sourceHeight)||1,x:Number(layer.x)||0,y:Number(layer.y)||0,
+    w:Number(layer.w)||1,h:Number(layer.h)||1,baseW:Number(layer.baseW)||Number(layer.w)||1,baseH:Number(layer.baseH)||Number(layer.h)||1,
+    rot:Number(layer.rot)||0,opacity:Number.isFinite(Number(layer.opacity))?Number(layer.opacity):1,zoom:Number(layer.zoom)||100,visible:layer.visible!==false,
+    inAnimType:layer.inAnimType||'none',inAnimDuration:Number(layer.inAnimDuration)||0.6,loopAnimType:layer.loopAnimType||'none',
+    loopSpeed:Number(layer.loopSpeed)||1,loopIntensity:Number(layer.loopIntensity)||1
+  };
+}
+async function buildProjectData(includeAssets){
+  const project={
+    format:'TextImageEditer.Project',version:1,app:'TextImageEditer_Ver.1',savedAt:new Date().toISOString(),title:els.customTitleInput.value||'',
+    theme:document.documentElement.getAttribute('data-theme')||'light',
+    canvas:{width:canvas.width,height:canvas.height,preset:els.canvasPreset.value,customCanvas:!!customCanvas,resolutionTierIndex:Number(resolutionTierIndex)||0},
+    preview:{zoomPercent:Math.round(zoom*100),zoomAutoFit:!!zoomAutoFit},
+    playback:{playing:!!animationPlaying,speed:Number(animationSpeed)||1,time:Number(animationTime)||0},
+    selectedLayerId:selectedLayerId,selectedAssetId:els.assetPoolSelect.value||null,activeEditorTab:els.panelLayers.classList.contains('active')?'layers':'image',
+    nextLayerId:Number(nextLayerId)||1,nextAssetId:Number(nextAssetId)||1,includeAssets:!!includeAssets,
+    assets:[],layers:layers.map(serializeLayer)
+  };
+  for(const asset of assetPool){
+    const entry={id:asset.id,name:asset.name,kind:asset.kind,mimeType:asset.mimeType||'',width:asset.width,height:asset.height,totalDuration:Number(asset.totalDuration)||1,frameCount:asset.frames?.length||1};
+    if(includeAssets) entry.sourceDataUrl=asset.sourceDataUrl||'';
+    project.assets.push(entry);
+  }
+  return project;
+}
+async function saveProjectData(){
+  els.saveProjectButton.disabled=true;
+  els.projectDataStatus.textContent='作業データを作成中…';
+  try{
+    const includeAssets=!!els.saveProjectWithAssets.checked;
+    const project=await buildProjectData(includeAssets);
+    downloadBlob(new Blob([JSON.stringify(project,null,2)],{type:'text/plain;charset=utf-8'}),sanitizeProjectFileName(projectBaseName()));
+    els.projectDataStatus.textContent=includeAssets?'保存完了：素材ファイルを含めました。':'保存完了：素材ファイルは含めていません。';
+  }catch(error){
+    console.error(error); els.projectDataStatus.textContent=`保存失敗：${error?.message||error}`;
+  }finally{ els.saveProjectButton.disabled=false; }
+}
+function findExistingAssetByName(name){ return assetPool.find(asset=>asset.name===name)||null; }
+async function restoreProjectAssets(project){
+  const idMap=new Map();
+  const assets=Array.isArray(project.assets)?project.assets:[];
+  if(project.includeAssets){
+    assetPool=[]; nextAssetId=1;
+    for(const entry of assets){
+      if(!entry.sourceDataUrl) continue;
+      const file=await dataURLToFile(entry.sourceDataUrl,entry.name,entry.mimeType||'');
+      const gif=entry.kind==='gif' || isGifFile(file);
+      const decoded=gif ? await decodeGifFile(file) : await decodeImageFile(file);
+      const asset={id:createAssetId(),name:entry.name,mimeType:file.type||entry.mimeType||'',kind:gif?'gif':'static',sourceDataUrl:entry.sourceDataUrl,...decoded};
+      assetPool.push(asset); idMap.set(String(entry.id),asset.id);
+    }
+  }else{
+    for(const entry of assets){ const asset=findExistingAssetByName(entry.name); if(asset) idMap.set(String(entry.id),asset.id); }
+  }
+  return idMap;
+}
+function applyLoadedLayerData(raw,asset){
+  return {
+    id:Number(raw.id)||nextLayerId++,name:String(raw.name||asset?.name||'レイヤー'),assetId:asset?.id ?? raw.assetId,kind:asset?.kind||raw.kind||'static',
+    frames:asset?.frames||[],frameDurations:asset ? asset.frames.map(frame=>normalizeDelay(frame.duration)) : (Array.isArray(raw.frameDurations)?raw.frameDurations.map(normalizeDelay):[]),
+    totalDuration:asset?.totalDuration||Number(raw.totalDuration)||1,sourceWidth:asset?.width||Number(raw.sourceWidth)||1,sourceHeight:asset?.height||Number(raw.sourceHeight)||1,
+    x:Number(raw.x)||0,y:Number(raw.y)||0,w:Math.max(1,Number(raw.w)||1),h:Math.max(1,Number(raw.h)||1),baseW:Math.max(1,Number(raw.baseW)||Number(raw.w)||1),baseH:Math.max(1,Number(raw.baseH)||Number(raw.h)||1),
+    rot:Number(raw.rot)||0,opacity:Number.isFinite(Number(raw.opacity))?Math.max(0,Math.min(1,Number(raw.opacity))):1,zoom:Number(raw.zoom)||100,visible:raw.visible!==false,
+    inAnimType:raw.inAnimType||'none',inAnimDuration:Number(raw.inAnimDuration)||0.6,loopAnimType:raw.loopAnimType||'none',loopSpeed:Number(raw.loopSpeed)||1,loopIntensity:Number(raw.loopIntensity)||1
+  };
+}
+async function loadProjectData(file){
+  els.projectDataStatus.textContent='作業データを読み込み中…';
+  const project=JSON.parse(await file.text());
+  if(!project || project.format!=='TextImageEditer.Project') throw new Error('TextImageEditerの作業データではありません。');
+  const idMap=await restoreProjectAssets(project);
+  els.customTitleInput.value=String(project.title||'');
+  document.title=els.customTitleInput.value.trim()?`${els.customTitleInput.value.trim()} | TextImageEditer_Ver.1`:'TextImageEditer_Ver.1';
+  if(project.theme) applyTheme(project.theme);
+  const c=project.canvas||{}; const cw=Math.max(1,Math.min(12000,Math.round(Number(c.width)||1920))); const ch=Math.max(1,Math.min(12000,Math.round(Number(c.height)||1080)));
+  canvas.width=cw; canvas.height=ch; els.canvasWidth.value=cw; els.canvasHeight.value=ch;
+  els.canvasPreset.value=c.preset && (RATIO_DEFINITIONS[c.preset]||c.preset==='custom')?c.preset:'custom'; els.canvasPreset.dispatchEvent(new Event('optionsupdated')); customCanvas=!!c.customCanvas||els.canvasPreset.value==='custom'; resolutionTierIndex=Math.max(0,Math.min(RESOLUTION_TIERS.length-1,Number(c.resolutionTierIndex)||0)); updateResolutionUI();
+  const p=project.preview||{}; zoomAutoFit=!!p.zoomAutoFit; setZoomFromValue(Math.max(5,Math.min(100,Number(p.zoomPercent)||50)),{manual:!zoomAutoFit}); if(zoomAutoFit) applyAutoFitZoom();
+  const pb=project.playback||{}; animationSpeed=Math.max(0.01,Math.min(10,Number(pb.speed)||1)); els.gifSpeedNumber.value=Math.round(animationSpeed*100); els.gifSpeed.value=Math.max(25,Math.min(400,Math.round(animationSpeed*100))); updateRangeProgress(els.gifSpeed);
+  const loadedLayers=[]; for(const raw of (Array.isArray(project.layers)?project.layers:[])){ const assetId=idMap.get(String(raw.assetId)); const asset=assetId===undefined?null:getAsset(assetId); if(asset) loadedLayers.push(applyLoadedLayerData(raw,asset)); }
+  layers=loadedLayers; selectedLayerId=project.selectedLayerId!=null&&layers.some(l=>l.id===Number(project.selectedLayerId))?Number(project.selectedLayerId):(layers[0]?.id||null);
+  nextLayerId=Math.max(Number(project.nextLayerId)||1,...layers.map(l=>Number(l.id)||0))+1; nextAssetId=Math.max(Number(project.nextAssetId)||1,...assetPool.map(a=>Number(a.id)||0))+1;
+  animationTime=Math.max(0,Number(pb.time)||0); animationPlaying=!!pb.playing; lastAnimationTimestamp=performance.now();
+  populateAssetPool(project.selectedAssetId||assetPool[0]?.id||null); renderLayerUI(); syncControls(); render(); setEditorTab(project.activeEditorTab==='layers'?'layers':(layers.length?'image':'layers'),false);
+  if(!project.includeAssets){
+    const missing=(Array.isArray(project.layers)?project.layers:[]).filter(l=>!idMap.has(String(l.assetId))).length;
+    els.projectDataStatus.textContent=missing?`読み込み完了：${missing}レイヤーは素材が未接続です。同じファイルをロードすると再接続できます。`:'読み込み完了。';
+  }else{
+    const missing=(Array.isArray(project.layers)?project.layers:[]).filter(l=>!idMap.has(String(l.assetId))).length;
+    els.projectDataStatus.textContent=missing?`読み込み完了：${missing}レイヤーを復元できませんでした。`:`読み込み完了：${layers.length}レイヤー。`;
+  }
+}
+els.saveProjectButton.addEventListener('click',saveProjectData);
+els.loadProjectButton.addEventListener('click',()=>els.projectLoadFile.click());
+els.projectLoadFile.addEventListener('change',async()=>{
+  const file=els.projectLoadFile.files?.[0]; if(!file) return;
+  try{ await loadProjectData(file); }catch(error){ console.error(error); els.projectDataStatus.textContent=`読み込み失敗：${error?.message||error}`; }
+  finally{ els.projectLoadFile.value=''; }
+});
 
 function applyTheme(theme){
   const next=theme==='dark'?'dark':'light';
