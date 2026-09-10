@@ -156,6 +156,14 @@ input[type=range]::-moz-range-thumb{
   .export-row button{min-width:150px}
   .export-row .export-format-label{display:flex;flex-direction:column;gap:5px;min-width:0}
   .export-row .status-line{min-width:0}
+  .background-row{display:flex;align-items:flex-end;gap:8px;width:100%;flex-wrap:wrap;margin-top:10px}
+  .background-mode{display:flex;align-items:center;gap:8px;min-height:38px;padding:0 2px;white-space:nowrap}
+  .background-mode label{display:flex;align-items:center;gap:5px;margin:0;font-size:12px;color:var(--muted)}
+  .background-mode input[type=checkbox]{margin:0;accent-color:var(--accent)}
+  .background-color-block{display:flex;align-items:flex-end;gap:8px;min-width:220px;flex:0 1 300px}
+  .background-color-wrap{display:flex;align-items:center;gap:8px;min-height:38px}
+  #backgroundColor{width:52px;height:38px;padding:3px;border:1px solid var(--line);border-radius:8px;background:var(--sub);cursor:pointer}
+  .background-color-code{min-width:96px;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
   .animation-row{display:flex;align-items:flex-end;gap:8px;width:100%;flex-wrap:wrap}
   .animation-row .frame-block{display:flex;align-items:flex-end;gap:8px;flex:1 1 420px;min-width:280px}
   .animation-row .frame-number{flex:0 0 88px}
@@ -355,6 +363,21 @@ input[type=range]::-moz-range-thumb{
       <span id="exportStatus" class="tip status-line"></span>
     </div>
 
+    <div class="background-row" aria-label="背景設定">
+      <div class="background-mode">
+        <label title="書き出し時の背景を透明にします">
+          <input id="backgroundTransparent" type="checkbox" checked> 背景を透明
+        </label>
+      </div>
+      <div class="background-color-block">
+        <label for="backgroundColor">背景色</label>
+        <div class="background-color-wrap">
+          <input id="backgroundColor" type="color" value="#000000" aria-label="背景色を選択">
+          <span id="backgroundColorCode" class="background-color-code">#000000</span>
+        </div>
+      </div>
+    </div>
+
     <p class="tip">キャンバス比率は8種類。初期値は16:9のFHD（1920 × 1080）。画素の上昇・下降で標準解像度を切り替え、カスタムでは幅・高さを直接指定できます。</p>
   </section>
 
@@ -541,6 +564,9 @@ const els = {
   saveProjectButton: document.getElementById('saveProjectButton'),
   projectDataStatus: document.getElementById('projectDataStatus'),
   exportStatus: document.getElementById('exportStatus'),
+  backgroundTransparent: document.getElementById('backgroundTransparent'),
+  backgroundColor: document.getElementById('backgroundColor'),
+  backgroundColorCode: document.getElementById('backgroundColorCode'),
   canvasPreset: document.getElementById('canvasPreset'),
   canvasWidth: document.getElementById('canvasWidth'),
   canvasHeight: document.getElementById('canvasHeight'),
@@ -717,6 +743,8 @@ let animationTime = 0;
 let lastAnimationTimestamp = performance.now();
 let resolutionTierIndex = 2;
 let customCanvas = false;
+let backgroundTransparent = true;
+let backgroundColor = '#000000';
 
 function gcd(a,b){
   a = Math.abs(Math.round(a)); b = Math.abs(Math.round(b));
@@ -1977,8 +2005,46 @@ async function getGifWorkerScript(){
   return gifWorkerScriptPromise;
 }
 
-function renderExportFrame(targetCtx,time){
+function normalizeHexColor(value){
+  const raw=String(value||'').trim();
+  return /^#[0-9a-fA-F]{6}$/.test(raw) ? raw.toLowerCase() : '#000000';
+}
+function syncBackgroundUI(){
+  els.backgroundTransparent.checked=!!backgroundTransparent;
+  els.backgroundColor.value=normalizeHexColor(backgroundColor);
+  els.backgroundColorCode.textContent=normalizeHexColor(backgroundColor).toUpperCase();
+  els.backgroundColor.disabled=backgroundTransparent;
+  els.backgroundColorCode.style.opacity=backgroundTransparent?'0.45':'1';
+  applyCanvasBackground();
+}
+function applyCanvasBackground(){
+  const color=normalizeHexColor(backgroundColor);
+  if(backgroundTransparent){
+    canvas.style.backgroundColor='var(--checker-dark)';
+    canvas.style.backgroundImage='linear-gradient(45deg,var(--checker-light) 25%,transparent 25%),linear-gradient(-45deg,var(--checker-light) 25%,transparent 25%),linear-gradient(45deg,transparent 75%,var(--checker-light) 75%),linear-gradient(-45deg,transparent 75%,var(--checker-light) 75%)';
+    canvas.style.backgroundSize='24px 24px';
+    canvas.style.backgroundPosition='0 0,0 12px,12px -12px,-12px 0';
+  }else{
+    canvas.style.backgroundColor=color;
+    canvas.style.backgroundImage='none';
+    canvas.style.backgroundSize='';
+    canvas.style.backgroundPosition='';
+  }
+}
+function fillExportBackground(targetCtx, transparentOverride=null){
+  const transparent=transparentOverride===null ? backgroundTransparent : !!transparentOverride;
   targetCtx.clearRect(0,0,targetCtx.canvas.width,targetCtx.canvas.height);
+  if(!transparent){
+    targetCtx.save();
+    targetCtx.globalAlpha=1;
+    targetCtx.fillStyle=normalizeHexColor(backgroundColor);
+    targetCtx.fillRect(0,0,targetCtx.canvas.width,targetCtx.canvas.height);
+    targetCtx.restore();
+  }
+}
+
+function renderExportFrame(targetCtx,time,transparentOverride=null){
+  fillExportBackground(targetCtx,transparentOverride);
   layers.forEach(layer=>drawLayer(layer,targetCtx,time,time));
 }
 
@@ -2015,11 +2081,17 @@ function exportStill(format){
   const out=document.createElement('canvas');
   out.width=canvas.width; out.height=canvas.height;
   const outCtx=out.getContext('2d');
-  if(format==='jpeg'){
+  const transparent = format==='jpeg' ? false : backgroundTransparent;
+  const stillBackground = format==='jpeg' && backgroundTransparent ? '#ffffff' : backgroundColor;
+  fillExportBackground(outCtx,transparent);
+  if(format==='jpeg' && backgroundTransparent){
     outCtx.fillStyle='#ffffff';
     outCtx.fillRect(0,0,out.width,out.height);
+  }else if(format==='jpeg'){
+    outCtx.fillStyle=normalizeHexColor(stillBackground);
+    outCtx.fillRect(0,0,out.width,out.height);
   }
-  renderExportFrame(outCtx,animationTime);
+  layers.forEach(layer=>drawLayer(layer,outCtx,animationTime,animationTime));
   const mime=format==='jpeg'?'image/jpeg':'image/png';
   const quality=format==='jpeg'?0.94:undefined;
   out.toBlob(blob=>{
@@ -2053,7 +2125,8 @@ async function exportGif(mode){
     width:canvas.width,
     height:canvas.height,
     repeat:0,
-    background:'#ffffff',
+    background:normalizeHexColor(backgroundColor),
+    transparent:backgroundTransparent ? 0x000000 : null,
     workerScript
   });
   const frameCanvas=document.createElement('canvas');
@@ -2131,6 +2204,16 @@ function updateGifExportOptions(){
   els.gifFrameCountBlock.classList.toggle('is-disabled',!isGif);
 }
 els.exportFormat.addEventListener('change',updateGifExportOptions);
+els.backgroundTransparent.addEventListener('change',()=>{
+  backgroundTransparent=!!els.backgroundTransparent.checked;
+  syncBackgroundUI();
+  render();
+});
+els.backgroundColor.addEventListener('input',()=>{
+  backgroundColor=normalizeHexColor(els.backgroundColor.value);
+  syncBackgroundUI();
+  render();
+});
 els.gifExportFrames.addEventListener('change',()=>{
   const value=Math.max(2,Math.min(900,Math.round(Number(els.gifExportFrames.value)||30)));
   els.gifExportFrames.value=value;
@@ -2177,7 +2260,7 @@ async function buildProjectData(includeAssets){
   const project={
     format:'TextImageEditer.Project',version:1,app:'TextImageEditer_Ver.1',savedAt:new Date().toISOString(),title:els.customTitleInput.value||'',
     theme:document.documentElement.getAttribute('data-theme')||'light',
-    canvas:{width:canvas.width,height:canvas.height,preset:els.canvasPreset.value,customCanvas:!!customCanvas,resolutionTierIndex:Number(resolutionTierIndex)||0},
+    canvas:{width:canvas.width,height:canvas.height,preset:els.canvasPreset.value,customCanvas:!!customCanvas,resolutionTierIndex:Number(resolutionTierIndex)||0,backgroundTransparent:!!backgroundTransparent,backgroundColor:normalizeHexColor(backgroundColor)},
     preview:{zoomPercent:Math.round(zoom*100),zoomAutoFit:!!zoomAutoFit},
     playback:{playing:!!animationPlaying,speed:Number(animationSpeed)||1,time:Number(animationTime)||0},
     selectedLayerId:selectedLayerId,selectedAssetId:els.assetPoolSelect.value||null,activeEditorTab:els.panelLayers.classList.contains('active')?'layers':'image',
@@ -2242,6 +2325,9 @@ async function loadProjectData(file){
   if(project.theme) applyTheme(project.theme);
   const c=project.canvas||{}; const cw=Math.max(1,Math.min(12000,Math.round(Number(c.width)||1920))); const ch=Math.max(1,Math.min(12000,Math.round(Number(c.height)||1080)));
   canvas.width=cw; canvas.height=ch; els.canvasWidth.value=cw; els.canvasHeight.value=ch;
+  backgroundTransparent = c.backgroundTransparent !== false;
+  backgroundColor = normalizeHexColor(c.backgroundColor || '#000000');
+  syncBackgroundUI();
   els.canvasPreset.value=c.preset && (RATIO_DEFINITIONS[c.preset]||c.preset==='custom')?c.preset:'custom'; els.canvasPreset.dispatchEvent(new Event('optionsupdated')); customCanvas=!!c.customCanvas||els.canvasPreset.value==='custom'; resolutionTierIndex=Math.max(0,Math.min(RESOLUTION_TIERS.length-1,Number(c.resolutionTierIndex)||0)); updateResolutionUI();
   const p=project.preview||{}; zoomAutoFit=!!p.zoomAutoFit; setZoomFromValue(Math.max(5,Math.min(100,Number(p.zoomPercent)||50)),{manual:!zoomAutoFit}); if(zoomAutoFit) applyAutoFitZoom();
   const pb=project.playback||{}; animationSpeed=Math.max(0.01,Math.min(10,Number(pb.speed)||1)); els.gifSpeedNumber.value=Math.round(animationSpeed*100); els.gifSpeed.value=Math.max(25,Math.min(400,Math.round(animationSpeed*100))); updateRangeProgress(els.gifSpeed);
@@ -2310,6 +2396,9 @@ customCanvas=false;
 resolutionTierIndex=2;
 setZoomFromValue(50);
 setAnimationSpeedFromValue(100);
+backgroundTransparent=true;
+backgroundColor='#000000';
+syncBackgroundUI();
 updateResolutionUI();
 populateAssetPool();
 renderLayerUI();
