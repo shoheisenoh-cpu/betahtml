@@ -1074,18 +1074,37 @@ async function dataURLToFile(dataURL,name,mimeType='application/octet-stream'){
 }
 function createAssetId(){ return nextAssetId++; }
 function populateAssetPool(preferredId=null){
-  const previousId = preferredId ?? els.assetPoolSelect.value;
-  els.assetPoolSelect.innerHTML = '';
-  const placeholder = document.createElement('option');
-  placeholder.value=''; placeholder.disabled=true;
+  const previousId = preferredId != null && preferredId !== '' ? preferredId : els.assetPoolSelect.value;
+  const existingIds = new Set();
+  els.assetPoolSelect.querySelectorAll('option[data-asset-id]').forEach(option=>existingIds.add(String(option.dataset.assetId)));
+
+  // 一覧を毎回全消去せず、素材を追加した場合は不足分だけ追加する。
+  // これによりGIFを含む既存素材の選択状態・DOMを不用意に破棄しない。
+  let placeholder = els.assetPoolSelect.querySelector('option:not([data-asset-id])');
+  if(!placeholder){
+    placeholder = document.createElement('option');
+    placeholder.value='';
+    placeholder.disabled=true;
+    els.assetPoolSelect.insertBefore(placeholder,els.assetPoolSelect.firstChild);
+  }
   placeholder.textContent = assetPool.length ? '-- ロード済み素材 --' : '-- ファイルをロードしてください --';
-  els.assetPoolSelect.appendChild(placeholder);
+
   assetPool.forEach(asset=>{
+    const id=String(asset.id);
+    if(existingIds.has(id)) return;
     const option = document.createElement('option');
-    option.value = String(asset.id);
+    option.value = id;
+    option.dataset.assetId = id;
     option.textContent = `${asset.name}${asset.kind==='gif'?` (${asset.frames.length}F)`:''}`;
     els.assetPoolSelect.appendChild(option);
   });
+
+  // assetPool側に存在しない古いoptionだけを整理する。
+  const validIds=new Set(assetPool.map(asset=>String(asset.id)));
+  els.assetPoolSelect.querySelectorAll('option[data-asset-id]').forEach(option=>{
+    if(!validIds.has(String(option.dataset.assetId))) option.remove();
+  });
+
   const selectedAsset = assetPool.find(asset=>String(asset.id)===String(previousId)) || assetPool[0] || null;
   if(selectedAsset){
     els.assetPoolSelect.value = String(selectedAsset.id);
@@ -1142,7 +1161,10 @@ els.assetFile.addEventListener('change',async()=>{
     try{
       const gif = isGifFile(file);
       const decoded = gif ? await decodeGifFile(file) : await decodeImageFile(file);
-      const sourceDataUrl = await fileToDataURL(file);
+      let sourceDataUrl='';
+      try{ sourceDataUrl=await fileToDataURL(file); }catch(dataError){
+        console.warn('素材の保存用データ化に失敗しましたが、読み込み自体は継続します。',dataError);
+      }
       const newAsset = {id:createAssetId(),name:file.name,mimeType:file.type || (gif?'image/gif':'image/*'),kind:gif?'gif':'static',sourceDataUrl,...decoded};
       assetPool.push(newAsset);
       if(firstLoadedId===null) firstLoadedId=newAsset.id;
