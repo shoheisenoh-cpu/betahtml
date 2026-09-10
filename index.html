@@ -851,229 +851,437 @@ els.resolutionUp.addEventListener('click',()=>{
 });
 
 function normalizeDelay(ms){
-  const n = Number(ms);
-  if(!Number.isFinite(n) || n <= 0) return 100;
+  const n=Number(ms);
+  if(!Number.isFinite(n) || n<=0) return 10;
   return Math.max(10,Math.round(n));
 }
 function sumDurations(frames){
   return Math.max(1,frames.reduce((sum,f)=>sum+normalizeDelay(f.duration),0));
 }
 
-// GIFデコードを外部ライブラリに依存せず、このHTML内で完結させます。
-// 対応: GIF87a/GIF89a、GCT/LCT、透明色、インタレース、LZW、disposal 0/1/2/3。
+// GIFデコーダー（外部ライブラリ不要）。
+// GIF87a/GIF89a、GCT/LCT、GCE、透明色、インタレース、LZW、Disposal 0/1/2/3、
+// Comment / Plain Text / Application Extension の安全なスキップと、Netscape系ループ情報に対応。
+const GIF_MAX_DIMENSION=12000;
+const GIF_MAX_FRAMES=900;
+const GIF_MAX_TOTAL_FRAME_PIXELS=120000000;
+
 function parseGifArrayBuffer(buffer){
   const bytes=new Uint8Array(buffer);
   let p=0;
-  const text=(n)=>String.fromCharCode(...bytes.subarray(p,p+n));
-  const readU8=()=>{ if(p>=bytes.length) throw new Error('GIFデータが途中で終了しています。'); return bytes[p++]; };
-  const readU16=()=>readU8() | (readU8()<<8);
-  const readBytes=(n)=>{ if(p+n>bytes.length) throw new Error('GIFデータが壊れています。'); const a=bytes.subarray(p,p+n); p+=n; return a; };
+  const fail=(message)=>{ throw new Error(`GIF解析エラー: ${message}`); };
+  const need=(n)=>{ if(!Number.isInteger(n)||n<0||p+n>bytes.length) fail('データが途中で終了しています。'); };
+  const readU8=()=>{ need(1); return bytes[p++]; };
+  const readU16=()=>{ const lo=readU8(),hi=readU8(); return lo|(hi<<8); };
+  const readBytes=(n)=>{ need(n); const a=bytes.subarray(p,p+n); p+=n; return a; };
+  const readAscii=(n)=>String.fromCharCode(...readBytes(n));
   const readColorTable=(count)=>{
-    const table=[];
-    for(let i=0;i<count;i++) table.push([readU8(),readU8(),readU8()]);
+    if(count<2 || count>256) fail(`カラーテーブルサイズが不正です: ${count}`);
+    const table=new Array(count);
+    for(let i=0;i<count;i++) table[i]=[readU8(),readU8(),readU8()];
     return table;
-  };
-  const skipSubBlocks=()=>{
-    while(true){ const size=readU8(); if(size===0) break; readBytes(size); }
   };
   const readSubBlocks=()=>{
     const chunks=[];
+    let total=0;
     while(true){
       const size=readU8();
       if(size===0) break;
-      chunks.push(readBytes(size));
+      if(size>255) fail('サブブロックサイズが不正です。');
+      const chunk=readBytes(size);
+      chunks.push(chunk);
+      total+=size;
+      if(total>bytes.length) fail('サブブロックが大きすぎます。');
     }
-    let total=0; for(const c of chunks) total+=c.length;
-    const out=new Uint8Array(total); let o=0;
-    for(const c of chunks){ out.set(c,o); o+=c.length; }
+    const out=new Uint8Array(total);
+    let o=0;
+    for(const chunk of chunks){ out.set(chunk,o); o+=chunk.length; }
     return out;
   };
+  const skipSubBlocks=()=>{
+    while(true){
+      const size=readU8();
+      if(size===0) return;
+      readBytes(size);
+    }
+  };
 
-  const signature=text(6);
-  if(signature!=='GIF87a' && signature!=='GIF89a') throw new Error('GIF形式を認識できません。');
-  const width=readU16(), height=readU16(), packed=readU8(), backgroundIndex=readU8();
-  readU8(); // pixel aspect ratio
+  const signature=readAscii(6);
+  if(signature!=='GIF87a' && signature!=='GIF89a') fail('GIF87a/GIF89aではありません。');
+  const width=readU16();
+  const height=readU16();
+  if(width<1 || height<1 || width>GIF_MAX_DIMENSION || height>GIF_MAX_DIMENSION){
+    fail(`論理画面サイズが対応範囲外です: ${width} × ${height}`);
+  }
+  const packed=readU8();
+  const backgroundIndex=readU8();
+  const pixelAspect=readU8();
   const gctFlag=!!(packed&0x80);
+  const colorResolution=((packed>>4)&0x07)+1;
   const gctSort=!!(packed&0x08);
-  const gctSize=2 << (packed&0x07);
-  const gct=gctFlag ? readColorTable(gctSize) : null;
+  const gctSize=2<<(packed&0x07);
+  const gct=gctFlag?readColorTable(gctSize):null;
+  const backgroundColor=gct && backgroundIndex<gct.length ? gct[backgroundIndex] : null;
+
   const frames=[];
-  let gce={disposal:0,delay:100,transparentIndex:null,userInput:false};
+  let gce=null;
+  let loopCount=null;
+  let hasTrailer=false;
+  let totalDecodedPixels=0;
+
   while(p<bytes.length){
     const introducer=readU8();
-    if(introducer===0x3B) break; // trailer
+    if(introducer===0x3B){ hasTrailer=true; break; }
+
     if(introducer===0x21){
       const label=readU8();
       if(label===0xF9){
         const blockSize=readU8();
-        if(blockSize!==4){ readBytes(blockSize); skipSubBlocks(); continue; }
+        if(blockSize!==4) fail(`Graphic Control Extensionのサイズが4ではありません: ${blockSize}`);
         const gp=readU8();
         const delayCs=readU16();
-        const transIndex=readU8();
-        readU8();
+        const transparentIndex=readU8();
+        const terminator=readU8();
+        if(terminator!==0) fail('Graphic Control Extensionの終端がありません。');
+        // Disposal method 4-7は予約値なので、実装上はNoneとして扱う。
+        const rawDisposal=(gp>>2)&0x07;
+        const disposal=rawDisposal>=4?0:rawDisposal;
         gce={
-          disposal:(gp>>2)&0x07,
+          disposal,
+          rawDisposal,
           delay:normalizeDelay(delayCs*10),
-          transparentIndex:(gp&0x01) ? transIndex : null,
+          transparentIndex:(gp&0x01)?transparentIndex:null,
           userInput:!!(gp&0x02)
         };
+      }else if(label===0x01){
+        // Plain Text Extension: 固定長12バイト + Data Sub-block。
+        const blockSize=readU8();
+        if(blockSize!==12) fail(`Plain Text Extensionのサイズが12ではありません: ${blockSize}`);
+        readBytes(12);
+        skipSubBlocks();
+      }else if(label===0xFF){
+        const blockSize=readU8();
+        if(blockSize!==11) fail(`Application Extensionのサイズが11ではありません: ${blockSize}`);
+        const appId=readAscii(8);
+        const auth=readAscii(3);
+        const data=readSubBlocks();
+        if((appId==='NETSCAPE'&&auth==='2.0') || (appId==='ANIMEXTS'&&auth==='1.0')){
+          if(data.length>=3 && data[0]===1) loopCount=data[1]|(data[2]<<8);
+        }
+      }else if(label===0xFE){
+        // Comment Extension
+        skipSubBlocks();
       }else{
+        // 未知のExtensionでも構造を壊さずサブブロックを読み飛ばす。
         skipSubBlocks();
       }
       continue;
     }
-    if(introducer!==0x2C) throw new Error('未対応のGIFブロックを検出しました。');
-    const left=readU16(), top=readU16(), w=readU16(), h=readU16(), ip=readU8();
-    const lctFlag=!!(ip&0x80), interlace=!!(ip&0x40);
-    const lctSize=2 << (ip&0x07);
-    const lct=lctFlag ? readColorTable(lctSize) : null;
-    const palette=lct || gct;
-    if(!palette) throw new Error('GIFのカラーテーブルがありません。');
+
+    if(introducer!==0x2C) fail(`未対応のブロック: 0x${introducer.toString(16).padStart(2,'0')}`);
+    if(frames.length>=GIF_MAX_FRAMES) fail(`フレーム数が上限(${GIF_MAX_FRAMES})を超えています。`);
+
+    const left=readU16();
+    const top=readU16();
+    const frameW=readU16();
+    const frameH=readU16();
+    if(frameW<1 || frameH<1) fail(`フレームサイズが不正です: ${frameW} × ${frameH}`);
+
+    const imagePacked=readU8();
+    const lctFlag=!!(imagePacked&0x80);
+    const interlace=!!(imagePacked&0x40);
+    const lctSort=!!(imagePacked&0x20);
+    const lctSize=2<<(imagePacked&0x07);
+    const lct=lctFlag?readColorTable(lctSize):null;
+    const palette=lct||gct;
+    if(!palette) fail(`フレーム${frames.length+1}: カラーテーブルがありません。`);
+    if(gce?.transparentIndex!==null && gce?.transparentIndex!==undefined && gce.transparentIndex>=palette.length){
+      fail(`フレーム${frames.length+1}: 透明色インデックスがパレット範囲外です。`);
+    }
     const minCodeSize=readU8();
     const compressed=readSubBlocks();
-    const indices=gifLzwDecode(compressed,minCodeSize,w*h);
-    const reordered=interlace ? gifDeinterlace(indices,w,h) : indices;
-    const rgba=new Uint8ClampedArray(w*h*4);
+    const pixelCount=frameW*frameH;
+    if(!Number.isSafeInteger(pixelCount) || pixelCount<1) fail(`フレーム${frames.length+1}: ピクセル数が不正です。`);
+    totalDecodedPixels+=pixelCount;
+    if(totalDecodedPixels>GIF_MAX_TOTAL_FRAME_PIXELS){
+      fail(`展開ピクセル数が安全上限(${GIF_MAX_TOTAL_FRAME_PIXELS.toLocaleString()})を超えています。`);
+    }
+
+    let indices;
+    try{
+      indices=gifLzwDecode(compressed,minCodeSize,pixelCount);
+    }catch(error){
+      throw new Error(`フレーム${frames.length+1}のLZWデコードに失敗しました: ${error?.message||error}`);
+    }
+    const reordered=interlace?gifDeinterlace(indices,frameW,frameH):indices;
+    const rgba=new Uint8ClampedArray(pixelCount*4);
     for(let i=0;i<reordered.length;i++){
       const idx=reordered[i];
-      const c=palette[idx] || [0,0,0];
+      if(idx>=palette.length) fail(`フレーム${frames.length+1}: パレットインデックス ${idx} が範囲外です。`);
+      const c=palette[idx];
       const o=i*4;
-      rgba[o]=c[0]; rgba[o+1]=c[1]; rgba[o+2]=c[2]; rgba[o+3]=(gce.transparentIndex!==null && idx===gce.transparentIndex) ? 0 : 255;
+      rgba[o]=c[0]; rgba[o+1]=c[1]; rgba[o+2]=c[2];
+      rgba[o+3]=(gce?.transparentIndex!==null && gce?.transparentIndex!==undefined && idx===gce.transparentIndex)?0:255;
     }
-    frames.push({left,top,width:w,height:h,rgba,delay:gce.delay,disposal:gce.disposal});
-    gce={disposal:0,delay:100,transparentIndex:null,userInput:false};
+
+    frames.push({
+      left,top,width:frameW,height:frameH,rgba,
+      delay:normalizeDelay(gce?.delay ?? 10),
+      disposal:gce?.disposal??0,
+      rawDisposal:gce?.rawDisposal??0,
+      transparentIndex:gce?.transparentIndex??null,
+      lctFlag,interlace,lctSort
+    });
+    gce=null;
   }
-  if(!frames.length) throw new Error('GIFにフレームがありません。');
-  return {width,height,backgroundIndex,gct,gctSort,frames};
+
+  if(!frames.length) fail('GIFに画像フレームがありません。');
+  if(!hasTrailer) fail('GIFの終端(Trailer)がありません。');
+  return {width,height,backgroundIndex,backgroundColor,pixelAspect,colorResolution,gct,gctSort,frames,loopCount,totalDecodedPixels};
 }
 
 function gifLzwDecode(data,minCodeSize,expectedSize){
-  if(minCodeSize<2 || minCodeSize>8) throw new Error('GIFのLZWコードサイズが不正です。');
+  if(!Number.isInteger(minCodeSize)||minCodeSize<2||minCodeSize>8){
+    throw new Error(`LZW最小コードサイズが不正です: ${minCodeSize}`);
+  }
+  if(!Number.isInteger(expectedSize)||expectedSize<1){
+    throw new Error('LZWの期待出力サイズが不正です。');
+  }
+
+  const MAX_CODES=4096;
   const clearCode=1<<minCodeSize;
   const endCode=clearCode+1;
-  const output=new Uint8Array(Math.max(0,expectedSize));
-  const prefix=new Int16Array(4096);
-  const suffix=new Uint8Array(4096);
-  const stack=new Uint8Array(4097);
-  for(let i=0;i<clearCode;i++) suffix[i]=i;
+  const prefix=new Int16Array(MAX_CODES);
+  const suffix=new Uint8Array(MAX_CODES);
+  const pixelStack=new Uint8Array(MAX_CODES+1);
+  const output=new Uint8Array(expectedSize);
+  const nullCode=-1;
 
-  let bitPos=0;
-  const readCode=(size)=>{
-    let code=0;
-    for(let i=0;i<size;i++){
-      const byteIndex=bitPos>>3, bitIndex=bitPos&7;
+  for(let i=0;i<clearCode;i++){
+    prefix[i]=0;
+    suffix[i]=i;
+  }
+
+  let available=clearCode+2;
+  let codeSize=minCodeSize+1;
+  let codeMask=(1<<codeSize)-1;
+  let oldCode=nullCode;
+  let first=0;
+  let datum=0;
+  let bits=0;
+  let byteIndex=0;
+  let top=0;
+  let outPos=0;
+  let sawClear=false;
+  let sawEnd=false;
+
+  const readCode=()=>{
+    while(bits<codeSize){
       if(byteIndex>=data.length) return null;
-      code |= ((data[byteIndex]>>bitIndex)&1)<<i;
-      bitPos++;
+      datum |= data[byteIndex++] << bits;
+      bits += 8;
     }
+    const code=datum & codeMask;
+    datum >>>= codeSize;
+    bits -= codeSize;
     return code;
   };
 
-  let codeSize=minCodeSize+1;
-  let available=clearCode+2;
-  let oldCode=-1;
-  let outPos=0;
+  while(outPos<expectedSize){
+    if(top===0){
+      const code=readCode();
+      if(code===null) break;
 
-  while(outPos<output.length){
-    const code=readCode(codeSize);
-    if(code===null || code===endCode) break;
-    if(code===clearCode){
-      codeSize=minCodeSize+1;
-      available=clearCode+2;
-      oldCode=-1;
-      continue;
-    }
-    if(code>=4096) throw new Error('GIFのLZWコードが範囲外です。');
-
-    const inCode=code;
-    let current=code;
-    let stackSize=0;
-    let firstValue=0;
-
-    if(code>=available){
-      if(oldCode<0) throw new Error('GIFのLZWデータを解凍できません。');
-      current=oldCode;
-      while(current>=clearCode){
-        if(stackSize>=stack.length) throw new Error('GIFのLZWスタックがオーバーフローしました。');
-        stack[stackSize++]=suffix[current];
-        current=prefix[current];
+      if(code===clearCode){
+        codeSize=minCodeSize+1;
+        codeMask=(1<<codeSize)-1;
+        available=clearCode+2;
+        oldCode=nullCode;
+        sawClear=true;
+        continue;
       }
-      if(stackSize>=stack.length) throw new Error('GIFのLZWスタックがオーバーフローしました。');
-      firstValue=current;
-      stack[stackSize++]=firstValue;
-    }else{
-      while(current>=clearCode){
-        if(stackSize>=stack.length) throw new Error('GIFのLZWスタックがオーバーフローしました。');
-        stack[stackSize++]=suffix[current];
-        current=prefix[current];
+      if(code===endCode){
+        sawEnd=true;
+        break;
       }
-      if(stackSize>=stack.length) throw new Error('GIFのLZWスタックがオーバーフローしました。');
-      firstValue=current;
-      stack[stackSize++]=firstValue;
+      if(code>available || code>4095){
+        throw new Error(`未定義のLZWコードです: ${code} (next=${available}, codeSize=${codeSize})`);
+      }
+      if(oldCode===nullCode){
+        if(code>=clearCode){
+          throw new Error('最初のLZWデータコードが不正です。');
+        }
+        pixelStack[top++]=suffix[code];
+        oldCode=code;
+        first=code;
+      }else{
+        const inCode=code;
+        let codeForSequence;
+        if(code===available){
+          if(available>=MAX_CODES){
+            throw new Error('LZW辞書が満杯の状態で未定義コードが現れました。');
+          }
+          pixelStack[top++]=first;
+          codeForSequence=oldCode;
+        }else{
+          codeForSequence=code;
+        }
+        let sequenceCode=codeForSequence;
+        if(sequenceCode>=MAX_CODES){
+          throw new Error('LZW辞書参照が範囲外です。');
+        }
+        while(sequenceCode>clearCode){
+          if(sequenceCode>=available || top>=pixelStack.length){
+            throw new Error('LZW辞書参照が不正です。');
+          }
+          pixelStack[top++]=suffix[sequenceCode];
+          sequenceCode=prefix[sequenceCode];
+        }
+        if(sequenceCode<0 || sequenceCode>=clearCode){
+          throw new Error('LZW辞書の終端が不正です。');
+        }
+        first=suffix[sequenceCode]&0xff;
+        if(top>=pixelStack.length){
+          throw new Error('LZW展開スタックがオーバーフローしました。');
+        }
+        pixelStack[top++]=first;
+
+        if(available<MAX_CODES){
+          prefix[available]=oldCode;
+          suffix[available]=first;
+          available++;
+          if((available & codeMask)===0 && available<MAX_CODES && codeSize<12){
+            codeSize++;
+            codeMask=(1<<codeSize)-1;
+          }
+        }
+        oldCode=inCode;
+      }
+
+      if(!sawClear && oldCode!==nullCode){
+        // Clear Codeを省略する非標準GIFも、辞書が未初期化のままにならない範囲で受理。
+        sawClear=true;
+      }
     }
 
-    while(stackSize>0 && outPos<output.length){
-      output[outPos++]=stack[--stackSize];
+    if(top>0){
+      output[outPos++]=pixelStack[--top];
     }
-
-    if(oldCode>=0 && available<4096){
-      prefix[available]=oldCode;
-      suffix[available]=firstValue;
-      available++;
-      if(available >= (1<<codeSize) && codeSize<12) codeSize++;
-    }
-    oldCode=inCode;
   }
+
+  if(outPos!==expectedSize){
+    throw new Error(`LZW展開画素数が不足しています: ${outPos}/${expectedSize}`);
+  }
+  // 仕様上End Codeが望ましいが、既に全画素を完全に展開できた場合は互換性のため受理する。
+  // ただしEnd Codeが存在する場合は必ずそこでデコードを終了する。
   return output;
 }
 
 function gifDeinterlace(data,width,height){
-  const out=new Uint8Array(data.length); let src=0;
+  if(data.length!==width*height) throw new Error('インタレース展開前の画素数が一致しません。');
+  const out=new Uint8Array(data.length);
+  let src=0;
   const passes=[[0,8],[4,8],[2,4],[1,2]];
   for(const [start,step] of passes){
     for(let y=start;y<height;y+=step){
-      out.set(data.subarray(src,src+width),y*width); src+=width;
+      if(src+width>data.length) throw new Error('インタレースデータが不足しています。');
+      out.set(data.subarray(src,src+width),y*width);
+      src+=width;
     }
   }
+  if(src!==data.length) throw new Error('インタレースデータの行数が一致しません。');
   return out;
 }
 
+function makeCanvas(width,height){
+  const c=document.createElement('canvas');
+  c.width=width; c.height=height;
+  return c;
+}
+function captureCanvasRegion(source,x,y,width,height){
+  const left=Math.max(0,x), top=Math.max(0,y);
+  const right=Math.min(source.width,x+width), bottom=Math.min(source.height,y+height);
+  const w=right-left, h=bottom-top;
+  if(w<=0||h<=0) return null;
+  const saved=makeCanvas(w,h);
+  const sctx=saved.getContext('2d');
+  if(!sctx) throw new Error('GIF復元用Canvasを作成できませんでした。');
+  sctx.drawImage(source,left,top,w,h,0,0,w,h);
+  return {x:left,y:top,width:w,height:h,canvas:saved};
+}
+function restoreCanvasRegion(target,saved){
+  if(!saved) return;
+  const sctx=saved.canvas.getContext('2d');
+  if(!sctx) return;
+  const image=sctx.getImageData(0,0,saved.width,saved.height);
+  target.putImageData(image,saved.x,saved.y);
+}
 async function decodeGifFile(file){
   const parsed=parseGifArrayBuffer(await file.arrayBuffer());
   const logicalW=parsed.width, logicalH=parsed.height;
-  const work=document.createElement('canvas');
-  work.width=logicalW; work.height=logicalH;
+  const work=makeCanvas(logicalW,logicalH);
   const wctx=work.getContext('2d',{willReadFrequently:true});
   if(!wctx) throw new Error('GIF作業用Canvasを作成できませんでした。');
+
+  // Logical Screenの初期背景をGIFの背景色で初期化。
   wctx.clearRect(0,0,logicalW,logicalH);
-  let previousDisposal=0;
-  let previousRect=null;
+  if(parsed.backgroundColor){
+    const [r,g,b]=parsed.backgroundColor;
+    wctx.fillStyle=`rgb(${r},${g},${b})`;
+    wctx.fillRect(0,0,logicalW,logicalH);
+  }
+
+  let previousFrame=null;
   let savedBeforeFrame=null;
   const out=[];
-  for(const frame of parsed.frames){
-    if(previousDisposal===2 && previousRect){
-      wctx.clearRect(previousRect.left,previousRect.top,previousRect.width,previousRect.height);
-    }else if(previousDisposal===3 && savedBeforeFrame){
-      wctx.clearRect(0,0,logicalW,logicalH);
-      wctx.drawImage(savedBeforeFrame,0,0);
+
+  for(let i=0;i<parsed.frames.length;i++){
+    const frame=parsed.frames[i];
+
+    // 前フレームのDisposalを、次のフレームを描く前に適用する。
+    if(previousFrame?.disposal===2){
+      const x=Math.max(0,previousFrame.left);
+      const y=Math.max(0,previousFrame.top);
+      const right=Math.min(logicalW,previousFrame.left+previousFrame.width);
+      const bottom=Math.min(logicalH,previousFrame.top+previousFrame.height);
+      if(right>x && bottom>y){
+        if(parsed.backgroundColor){
+          const [r,g,b]=parsed.backgroundColor;
+          wctx.save();
+          wctx.fillStyle=`rgb(${r},${g},${b})`;
+          wctx.fillRect(x,y,right-x,bottom-y);
+          wctx.restore();
+        }else{
+          wctx.clearRect(x,y,right-x,bottom-y);
+        }
+      }
+    }else if(previousFrame?.disposal===3){
+      restoreCanvasRegion(wctx,savedBeforeFrame);
     }
-    if(frame.disposal===3){
-      savedBeforeFrame=document.createElement('canvas');
-      savedBeforeFrame.width=logicalW; savedBeforeFrame.height=logicalH;
-      savedBeforeFrame.getContext('2d').drawImage(work,0,0);
-    }else{
-      savedBeforeFrame=null;
-    }
+
+    savedBeforeFrame=frame.disposal===3 ? captureCanvasRegion(work,frame.left,frame.top,frame.width,frame.height) : null;
+
+    // putImageDataはCanvas外にはみ出した領域も自動的にクリップする。
     const patch=new ImageData(frame.rgba,frame.width,frame.height);
     wctx.putImageData(patch,frame.left,frame.top);
-    const full=document.createElement('canvas');
-    full.width=logicalW; full.height=logicalH;
-    full.getContext('2d').drawImage(work,0,0);
+
+    const full=makeCanvas(logicalW,logicalH);
+    const fullCtx=full.getContext('2d');
+    if(!fullCtx) throw new Error('GIFフレームCanvasを作成できませんでした。');
+    fullCtx.drawImage(work,0,0);
     out.push({source:full,duration:normalizeDelay(frame.delay)});
-    previousDisposal=frame.disposal || 0;
-    previousRect={left:frame.left,top:frame.top,width:frame.width,height:frame.height};
+    previousFrame=frame;
   }
-  return {frames:out,width:logicalW,height:logicalH,totalDuration:sumDurations(out)};
+
+  return {
+    frames:out,
+    width:logicalW,
+    height:logicalH,
+    totalDuration:sumDurations(out),
+    loopCount:parsed.loopCount,
+    gifPixelAspect:parsed.pixelAspect,
+    gifColorResolution:parsed.colorResolution
+  };
 }
 async function decodeImageFile(file){
   const url = URL.createObjectURL(file);
