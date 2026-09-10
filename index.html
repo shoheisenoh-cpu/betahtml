@@ -853,7 +853,7 @@ els.resolutionUp.addEventListener('click',()=>{
 function normalizeDelay(ms){
   const n = Number(ms);
   if(!Number.isFinite(n) || n <= 0) return 100;
-  return Math.max(20,Math.round(n));
+  return Math.max(10,Math.round(n));
 }
 function sumDurations(frames){
   return Math.max(1,frames.reduce((sum,f)=>sum+normalizeDelay(f.duration),0));
@@ -1182,9 +1182,13 @@ function getFrameSourceAt(layer,time){
   return layer.frames[layer.frames.length-1].source;
 }
 function animationTotalDuration(){
-  const durations = layers.filter(l=>l.frames?.length>1).map(l=>l.totalDuration);
+  // エディターの時間軸は、各レイヤーのGIFフレーム列と出現アニメーションを
+  // すべて含む最長時間に合わせます。GIFがある場合に不要な1秒補正を入れないことで、
+  // 元GIFの秒数をそのまま書き出し時間へ反映できます。静止画だけなら1秒を基準にします。
+  const durations = layers.filter(l=>l.frames?.length>1).map(l=>Math.max(1,Number(l.totalDuration)||1));
   const entranceDurations = layers.filter(l=>l.inAnimType!=='none').map(l=>getEntranceAnimationDurationMs(l));
-  return Math.max(1000,...durations, ...entranceDurations);
+  const maxDuration = Math.max(0,...durations, ...entranceDurations);
+  return maxDuration>0 ? maxDuration : 1000;
 }
 function animationFrameCount(){
   // プレビュー用タイムラインは30fpsで統一し、GIF素材がなくても
@@ -1440,6 +1444,11 @@ function easeOutBounce(x){
   if(x < 2.5/d1) return n1*(x-=2.25/d1)*x+0.9375;
   return n1*(x-=2.625/d1)*x+0.984375;
 }
+function getDeterministicNoise(seed){
+  // 書き出し時もプレビュー時も同じ時刻から同じ揺れを生成します。
+  const x=Math.sin(seed*12.9898+78.233)*43758.5453;
+  return x-Math.floor(x);
+}
 function getLayerAnimationState(layer,time,nowMs){
   const current=Math.max(0,Number(time)||0);
   // GIF素材側のフレームは getFrameSourceAt() 内で個別にループします。
@@ -1461,19 +1470,23 @@ function getLayerAnimationState(layer,time,nowMs){
   const loopTime=(Number.isFinite(nowMs)?nowMs:performance.now())/1000*(Number.isFinite(Number(layer?.loopSpeed))?Number(layer.loopSpeed):1);
   const intensity=Number.isFinite(Number(layer?.loopIntensity))?Number(layer.loopIntensity):1;
   if(layer?.loopAnimType!=='none' && intensity>0){
+    const layerSeed=Number(layer?.id)||1;
+    const noiseA=getDeterministicNoise(Math.floor(loopTime*30)+layerSeed*17);
+    const noiseB=getDeterministicNoise(Math.floor(loopTime*30)+layerSeed*31);
+    const noiseC=getDeterministicNoise(Math.floor(loopTime*30)+layerSeed*47);
     switch(layer.loopAnimType){
       case 'subtleShake':
-        loopOffsetX+=(Math.sin(loopTime*15)*1.5+(Math.random()-0.5)*1.2)*intensity;
-        loopOffsetY+=(Math.cos(loopTime*18)*1.5+(Math.random()-0.5)*1.2)*intensity;
+        loopOffsetX+=(Math.sin(loopTime*15)*1.5+(noiseA-0.5)*1.2)*intensity;
+        loopOffsetY+=(Math.cos(loopTime*18)*1.5+(noiseB-0.5)*1.2)*intensity;
         loopRotation+=Math.sin(loopTime*10)*0.015*intensity;
         break;
       case 'hardShake':
-        loopOffsetX+=((Math.random()-0.5)*8)*intensity;
-        loopOffsetY+=((Math.random()-0.5)*8)*intensity;
-        loopRotation+=((Math.random()-0.5)*0.08)*intensity;
+        loopOffsetX+=(noiseA-0.5)*8*intensity;
+        loopOffsetY+=(noiseB-0.5)*8*intensity;
+        loopRotation+=(noiseC-0.5)*0.08*intensity;
         break;
       case 'glitch':
-        if(Math.random()<0.12*intensity){ loopOffsetX+=(Math.random()-0.5)*20*intensity; loopAlpha*=0.6+Math.random()*0.4; }
+        if(noiseA<Math.min(1,0.12*intensity)){ loopOffsetX+=(noiseB-0.5)*20*intensity; loopAlpha*=0.6+noiseC*0.4; }
         break;
       case 'pulse': {
         const pulseFactor=1+(Math.sin(loopTime*4)*0.05)*intensity;
@@ -1711,22 +1724,26 @@ function getExportPlaybackSpeed(){
 
 function buildExportTimeline(total, frameCount=30){
   const duration=Math.max(1,Number(total)||1);
-  const count=Math.max(1,Math.min(900,Math.round(Number(frameCount)||1)));
-  if(count===1) return [{start:0,delay:Math.max(20,Math.round(duration))}];
+  let count=Math.max(1,Math.min(900,Math.round(Number(frameCount)||1)));
+  // GIFの表示時間は実質10ms単位なので、短時間に過剰なフレーム数を詰めて
+  // 総時間が延びることを防ぎます。必要なら同一静止画を使っても時間軸は崩しません。
+  if(count>1){
+    count=Math.min(count,Math.max(1,Math.floor(duration/10)));
+  }
+  if(count<=1) return [{start:0,delay:Math.max(10,Math.round(duration))}];
 
-  // 指定したフレーム数に合わせて均等サンプリングします。
-  // 各フレームの表示時間の合計は元のアニメーション時間と一致します。
   const step=duration/count;
   const timeline=[];
   for(let i=0;i<count;i++){
-    const start=Math.min(duration-1,Math.round(i*step));
-    const next=i===count-1 ? duration : Math.round((i+1)*step);
-    const delay=Math.max(20,next-start);
+    const start=Math.min(Math.max(0,duration-10),i*step);
+    const next=i===count-1 ? duration : (i+1)*step;
+    const delay=Math.max(10,Math.round(next-start));
     timeline.push({start,delay});
   }
+  // 量子化後の誤差を最後のフレームで補正し、総表示時間を目標値に合わせます。
+  const target=Math.max(10,Math.round(duration));
   const totalDelay=timeline.reduce((sum,item)=>sum+item.delay,0);
-  const correction=Math.round(duration)-totalDelay;
-  timeline[timeline.length-1].delay=Math.max(20,timeline[timeline.length-1].delay+correction);
+  timeline[timeline.length-1].delay=Math.max(10,timeline[timeline.length-1].delay+(target-totalDelay));
   return timeline;
 }
 
