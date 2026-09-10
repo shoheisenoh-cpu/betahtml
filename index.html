@@ -949,6 +949,14 @@ function parseGifArrayBuffer(buffer){
 
 function gifLzwDecode(data,minCodeSize,expectedSize){
   if(minCodeSize<2 || minCodeSize>8) throw new Error('GIFのLZWコードサイズが不正です。');
+  const clearCode=1<<minCodeSize;
+  const endCode=clearCode+1;
+  const output=new Uint8Array(Math.max(0,expectedSize));
+  const prefix=new Int16Array(4096);
+  const suffix=new Uint8Array(4096);
+  const stack=new Uint8Array(4097);
+  for(let i=0;i<clearCode;i++) suffix[i]=i;
+
   let bitPos=0;
   const readCode=(size)=>{
     let code=0;
@@ -960,40 +968,63 @@ function gifLzwDecode(data,minCodeSize,expectedSize){
     }
     return code;
   };
-  const clearCode=1<<minCodeSize;
-  const endCode=clearCode+1;
+
   let codeSize=minCodeSize+1;
-  let nextCode=endCode+1;
-  let table=[];
-  const reset=()=>{
-    table=new Array(clearCode);
-    for(let i=0;i<clearCode;i++) table[i]=[i];
-    codeSize=minCodeSize+1;
-    nextCode=endCode+1;
-  };
-  reset();
-  const out=[];
-  let prev=null;
-  while(true){
+  let available=clearCode+2;
+  let oldCode=-1;
+  let outPos=0;
+
+  while(outPos<output.length){
     const code=readCode(codeSize);
     if(code===null || code===endCode) break;
-    if(code===clearCode){ reset(); prev=null; continue; }
-    let entry;
-    if(code<table.length && table[code]) entry=table[code];
-    else if(code===nextCode && prev) entry=prev.concat(prev[0]);
-    else throw new Error('GIFのLZWデータを解凍できません。');
-    for(const v of entry) out.push(v);
-    if(prev){
-      table[nextCode++]=prev.concat(entry[0]);
-      if(nextCode === (1<<codeSize) && codeSize<12) codeSize++;
+    if(code===clearCode){
+      codeSize=minCodeSize+1;
+      available=clearCode+2;
+      oldCode=-1;
+      continue;
     }
-    prev=entry;
-    if(out.length>=expectedSize) break;
+    if(code>=4096) throw new Error('GIFのLZWコードが範囲外です。');
+
+    const inCode=code;
+    let current=code;
+    let stackSize=0;
+    let firstValue=0;
+
+    if(code>=available){
+      if(oldCode<0) throw new Error('GIFのLZWデータを解凍できません。');
+      current=oldCode;
+      while(current>=clearCode){
+        if(stackSize>=stack.length) throw new Error('GIFのLZWスタックがオーバーフローしました。');
+        stack[stackSize++]=suffix[current];
+        current=prefix[current];
+      }
+      if(stackSize>=stack.length) throw new Error('GIFのLZWスタックがオーバーフローしました。');
+      firstValue=current;
+      stack[stackSize++]=firstValue;
+    }else{
+      while(current>=clearCode){
+        if(stackSize>=stack.length) throw new Error('GIFのLZWスタックがオーバーフローしました。');
+        stack[stackSize++]=suffix[current];
+        current=prefix[current];
+      }
+      if(stackSize>=stack.length) throw new Error('GIFのLZWスタックがオーバーフローしました。');
+      firstValue=current;
+      stack[stackSize++]=firstValue;
+    }
+
+    while(stackSize>0 && outPos<output.length){
+      output[outPos++]=stack[--stackSize];
+    }
+
+    if(oldCode>=0 && available<4096){
+      prefix[available]=oldCode;
+      suffix[available]=firstValue;
+      available++;
+      if(available >= (1<<codeSize) && codeSize<12) codeSize++;
+    }
+    oldCode=inCode;
   }
-  if(out.length<expectedSize){
-    while(out.length<expectedSize) out.push(0);
-  }
-  return Uint8Array.from(out.subarray(0,expectedSize));
+  return output;
 }
 
 function gifDeinterlace(data,width,height){
