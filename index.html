@@ -150,8 +150,11 @@ input[type=range]::-moz-range-thumb{
   .asset-grid > div:last-child{display:flex;align-items:flex-end;min-width:0}
   .asset-grid > div:last-child button{flex:1 1 auto;min-width:190px;width:100%}
   .export-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));align-items:end;gap:8px;width:100%;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
-  .export-frame-count{display:flex;flex-direction:column;gap:5px;min-width:0}
-  .export-frame-count.is-disabled{opacity:.45}
+  .export-gif-control{display:flex;flex-direction:column;gap:5px;min-width:0}
+  .export-gif-control.is-disabled{opacity:.45}
+  .export-range-with-number{display:flex;align-items:center;gap:7px;min-width:0}
+  .export-range-with-number .unit-input{flex:0 0 92px}
+  .export-range-with-number input[type=range]{flex:1 1 auto;min-width:90px}
   .export-row .custom-select-wrapper{width:100%;min-width:0}
   .export-row button{min-width:150px}
   .export-row .export-format-label{display:flex;flex-direction:column;gap:5px;min-width:0}
@@ -171,6 +174,11 @@ input[type=range]::-moz-range-thumb{
   .animation-row .speed-block{display:flex;align-items:flex-end;gap:8px;flex:1 1 320px;min-width:260px}
   .animation-row .speed-number{flex:0 0 88px}
   .animation-row .speed-range{flex:1 1 180px;margin-bottom:7px}
+  .layer-start-block{display:flex;flex-direction:column;gap:5px;width:100%;margin-top:2px}
+  .layer-start-range{display:grid;grid-template-columns:minmax(84px,98px) minmax(0,1fr);gap:9px;align-items:center}
+  .layer-start-range input[type=range]{width:100%;min-width:90px}
+  .layer-start-block .unit-input{width:auto}
+  .layer-start-block .unit-input input{width:100%;box-sizing:border-box}
   .tip{font-size:11px;line-height:1.55;color:var(--muted)}
   .layout-grid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(380px,.95fr);gap:14px;align-items:stretch}
   .window{min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);overflow:hidden}
@@ -355,9 +363,16 @@ input[type=range]::-moz-range-thumb{
           <option value="jpeg">JPEG</option>
         </select>
       </div>
-      <div id="gifFrameCountBlock" class="export-frame-count">
-        <label for="gifExportFrames">GIFフレーム数</label>
-        <input id="gifExportFrames" type="number" min="2" max="900" step="1" value="30" inputmode="numeric">
+      <div id="gifDurationBlock" class="export-gif-control">
+        <label for="gifExportDuration">GIF秒数</label>
+        <div class="export-range-with-number">
+          <div class="unit-input"><input id="gifExportDurationNumber" type="number" min="0.1" max="30" step="0.1" value="1.0" inputmode="decimal"><span class="unit">秒</span></div>
+          <input id="gifExportDuration" type="range" min="0.1" max="30" step="0.1" value="1.0" aria-label="GIF書き出し秒数スライダー">
+        </div>
+      </div>
+      <div id="gifFpsBlock" class="export-gif-control">
+        <label for="gifExportFps">GIFフレームレート</label>
+        <div class="unit-input"><input id="gifExportFps" type="number" min="1" max="100" step="1" value="30" inputmode="numeric"><span class="unit">fps</span></div>
       </div>
       <button id="exportButton" class="primary" disabled>書き出す</button>
       <span id="exportStatus" class="tip status-line"></span>
@@ -495,6 +510,13 @@ input[type=range]::-moz-range-thumb{
                 <option value="float">ループ: 浮遊</option>
               </select>
             </div>
+            <div class="control-wide layer-start-block">
+              <label for="layerStartNumber">GIF開始秒</label>
+              <div class="layer-start-range">
+                <div class="unit-input"><input id="layerStartNumber" type="number" min="0" max="30" step="0.1" value="0" inputmode="decimal" aria-label="選択レイヤーのGIF開始秒を数値入力"><span class="unit">秒</span></div>
+                <input id="layerStartRange" type="range" min="0" max="30" step="0.1" value="0" aria-label="選択レイヤーのGIF開始秒スライダー">
+              </div>
+            </div>
             <div><label for="x">X</label><input id="x" type="number" step="1"></div>
             <div><label for="y">Y</label><input id="y" type="number" step="1"></div>
             <div class="control-wide">
@@ -555,8 +577,11 @@ const els = {
   panelImageAdjust: document.getElementById('panelImageAdjust'),
   themeToggle: document.getElementById('themeToggle'),
   exportFormat: document.getElementById('exportFormat'),
-  gifExportFrames: document.getElementById('gifExportFrames'),
-  gifFrameCountBlock: document.getElementById('gifFrameCountBlock'),
+  gifExportDuration: document.getElementById('gifExportDuration'),
+  gifExportDurationNumber: document.getElementById('gifExportDurationNumber'),
+  gifDurationBlock: document.getElementById('gifDurationBlock'),
+  gifExportFps: document.getElementById('gifExportFps'),
+  gifFpsBlock: document.getElementById('gifFpsBlock'),
   exportButton: document.getElementById('exportButton'),
   projectLoadFile: document.getElementById('projectLoadFile'),
   loadProjectButton: document.getElementById('loadProjectButton'),
@@ -598,6 +623,8 @@ const els = {
   selectedLayerTitle: document.getElementById('selectedLayerTitle'),
   inAnim: document.getElementById('inAnim'),
   loopAnim: document.getElementById('loopAnim'),
+  layerStartNumber: document.getElementById('layerStartNumber'),
+  layerStartRange: document.getElementById('layerStartRange'),
   x: document.getElementById('x'),
   y: document.getElementById('y'),
   w: document.getElementById('w'),
@@ -739,6 +766,9 @@ let zoom = 1;
 let zoomAutoFit = true;
 let animationPlaying = true;
 let animationSpeed = 1;
+let gifExportDurationSec = 1;
+let gifExportDurationUserSet = false;
+let gifExportFps = 30;
 let animationTime = 0;
 let lastAnimationTimestamp = performance.now();
 let resolutionTierIndex = 2;
@@ -1406,7 +1436,8 @@ function createLayerFromAsset(asset){
     y:(canvas.height-h)/2,
     w,h,baseW:w,baseH:h,rot:0,opacity:1,zoom:100,visible:true,
     inAnimType:'none',inAnimDuration:0.6,
-    loopAnimType:'none',loopSpeed:1.0,loopIntensity:1.0
+    loopAnimType:'none',loopSpeed:1.0,loopIntensity:1.0,
+    startTime:0
   };
 }
 function addAssetAsLayer(assetId){
@@ -1419,6 +1450,7 @@ function addAssetAsLayer(assetId){
   renderLayerUI();
   syncControls();
   render();
+  syncGifExportDefaultsFromAnimation(false);
   els.gifStatus.textContent = `「${asset.name}」をレイヤーに追加しました。`;
 }
 els.assetFile.addEventListener('change',async()=>{
@@ -1458,14 +1490,22 @@ els.addAssetLayer.addEventListener('click',()=>{
   // これにより同一素材を続けて複数レイヤーへ追加できる。
   els.assetPoolSelect.value = String(id);
   els.addAssetLayer.disabled = false;
+  syncGifExportDefaultsFromAnimation(false);
   els.assetPoolSelect.dispatchEvent(new Event('optionsupdated'));
 });
 
 function getSelectedLayer(){ return layers.find(l=>l.id===selectedLayerId) || null; }
+function getLayerStartTimeMs(layer){
+  return Math.max(0,Math.min(30000,Number(layer?.startTime)||0))*1000;
+}
+function getLayerLocalTime(layer,time){
+  return Math.max(0,(Number(time)||0)-getLayerStartTimeMs(layer));
+}
 function getFrameSourceAt(layer,time){
   if(!layer?.frames?.length) return null;
+  if((Number(time)||0) < getLayerStartTimeMs(layer)) return null;
   const total = Math.max(1,layer.totalDuration);
-  let t = ((Number(time)||0)%total+total)%total;
+  let t = getLayerLocalTime(layer,time);
   for(let i=0;i<layer.frames.length;i++){
     const delay = normalizeDelay(layer.frameDurations[i]);
     if(t < delay) return layer.frames[i].source;
@@ -1474,12 +1514,16 @@ function getFrameSourceAt(layer,time){
   return layer.frames[layer.frames.length-1].source;
 }
 function animationTotalDuration(){
-  // エディターの時間軸は、各レイヤーのGIFフレーム列と出現アニメーションを
-  // すべて含む最長時間に合わせます。GIFがある場合に不要な1秒補正を入れないことで、
-  // 元GIFの秒数をそのまま書き出し時間へ反映できます。静止画だけなら1秒を基準にします。
-  const durations = layers.filter(l=>l.frames?.length>1).map(l=>Math.max(1,Number(l.totalDuration)||1));
-  const entranceDurations = layers.filter(l=>l.inAnimType!=='none').map(l=>getEntranceAnimationDurationMs(l));
-  const maxDuration = Math.max(0,...durations, ...entranceDurations);
+  // 各レイヤーの開始秒を起点に、そのレイヤーが再生される想定時間を加えて
+  // タイムライン終端を求めます。GIFはGIF自身の長さ、静止画は1秒、
+  // 出現アニメーションはその継続時間を基準にします。
+  const durations = layers.map(layer=>{
+    const start=getLayerStartTimeMs(layer);
+    const gifDuration=layer.frames?.length>1 ? Math.max(1,Number(layer.totalDuration)||1) : 1000;
+    const entranceDuration=layer.inAnimType!=='none' ? getEntranceAnimationDurationMs(layer) : 0;
+    return start+Math.max(gifDuration,entranceDuration);
+  });
+  const maxDuration = Math.max(0,...durations);
   return maxDuration>0 ? maxDuration : 1000;
 }
 function animationFrameCount(){
@@ -1579,12 +1623,13 @@ function renderLayerUI(){
 function syncControls(){
   const layer = getSelectedLayer();
   const disabled = !layer;
-  [els.inAnim,els.loopAnim,els.x,els.y,els.w,els.h,els.layerZoom,els.layerZoomNumber,els.rot,els.rotNumber,els.opacity,els.opacityNumber,els.fit,els.center,els.duplicateLayerBtn,els.deleteLayerBtn].forEach(el=>el.disabled=disabled);
+  [els.inAnim,els.loopAnim,els.layerStartNumber,els.layerStartRange,els.x,els.y,els.w,els.h,els.layerZoom,els.layerZoomNumber,els.rot,els.rotNumber,els.opacity,els.opacityNumber,els.fit,els.center,els.duplicateLayerBtn,els.deleteLayerBtn].forEach(el=>el.disabled=disabled);
   if(!layer){
     els.selectedLayerTitle.textContent='選択なし';
     [els.x,els.y,els.w,els.h].forEach(el=>el.value='');
     els.inAnim.value='none'; els.inAnim.dispatchEvent(new Event('optionsupdated'));
     els.loopAnim.value='none'; els.loopAnim.dispatchEvent(new Event('optionsupdated'));
+    els.layerStartNumber.value=0; els.layerStartRange.value=0; updateRangeProgress(els.layerStartRange);
     els.layerZoomNumber.value=100; els.layerZoom.value=100; els.rotNumber.value=0; els.rot.value=0; els.opacityNumber.value=100; els.opacity.value=100;
     return;
   }
@@ -1593,6 +1638,10 @@ function syncControls(){
   els.inAnim.dispatchEvent(new Event('optionsupdated'));
   els.loopAnim.value = layer.loopAnimType || 'none';
   els.loopAnim.dispatchEvent(new Event('optionsupdated'));
+  const startSec=Math.max(0,Math.min(30,Number(layer.startTime)||0));
+  els.layerStartNumber.value=startSec.toFixed(1).replace(/\.0$/,'');
+  els.layerStartRange.value=startSec;
+  updateRangeProgress(els.layerStartRange);
   els.x.value = Math.round(layer.x);
   els.y.value = Math.round(layer.y);
   els.w.value = Math.round(layer.w);
@@ -1680,6 +1729,20 @@ function applyLayerAnimationSetting(type,value){
 }
 els.inAnim.addEventListener('change',()=>applyLayerAnimationSetting('in',els.inAnim.value));
 els.loopAnim.addEventListener('change',()=>applyLayerAnimationSetting('loop',els.loopAnim.value));
+function applyLayerStartTime(value){
+  const layer=getSelectedLayer(); if(!layer) return;
+  const n=Number(value); if(!Number.isFinite(n)) return;
+  const start=Math.max(0,Math.min(30,Math.round(n*10)/10));
+  layer.startTime=start;
+  els.layerStartNumber.value=start.toFixed(1).replace(/\.0$/,'');
+  els.layerStartRange.value=start;
+  updateRangeProgress(els.layerStartRange);
+  renderLayerUI();
+  render();
+  syncGifExportDefaultsFromAnimation(false);
+}
+els.layerStartRange.addEventListener('input',()=>applyLayerStartTime(els.layerStartRange.value));
+els.layerStartNumber.addEventListener('change',()=>applyLayerStartTime(els.layerStartNumber.value));
 function centerLayer(layer){
   if(!layer) return;
   layer.x=(canvas.width-layer.w)/2;
@@ -1742,8 +1805,11 @@ function getDeterministicNoise(seed){
   return x-Math.floor(x);
 }
 function getLayerAnimationState(layer,time,nowMs){
-  const current=Math.max(0,Number(time)||0);
-  // GIF素材側のフレームは getFrameSourceAt() 内で個別にループします。
+  if((Number(time)||0) < getLayerStartTimeMs(layer)){
+    return {offsetX:0,offsetY:0,scaleX:1,scaleY:1,rotation:0,alpha:0};
+  }
+  const current=getLayerLocalTime(layer,time);
+  // GIF素材側のフレームは getFrameSourceAt() 内で開始時刻を基準に個別にループします。
   // 出現アニメーションはグローバルな再生ループには依存せず、先頭から一度だけ進みます。
   let inAlpha=1,inScaleX=1,inScaleY=1,inOffsetX=0,inOffsetY=0;
   const inDuration=getEntranceAnimationDurationMs(layer);
@@ -1759,7 +1825,7 @@ function getLayerAnimationState(layer,time,nowMs){
     }
   }
   let loopOffsetX=0,loopOffsetY=0,loopScaleX=1,loopScaleY=1,loopRotation=0,loopAlpha=1;
-  const loopTime=(Number.isFinite(nowMs)?nowMs:performance.now())/1000*(Number.isFinite(Number(layer?.loopSpeed))?Number(layer.loopSpeed):1);
+  const loopTime=(current/1000)*(Number.isFinite(Number(layer?.loopSpeed))?Number(layer.loopSpeed):1);
   const intensity=Number.isFinite(Number(layer?.loopIntensity))?Number(layer.loopIntensity):1;
   if(layer?.loopAnimType!=='none' && intensity>0){
     const layerSeed=Number(layer?.id)||1;
@@ -2051,10 +2117,16 @@ function renderExportFrame(targetCtx,time,transparentOverride=null){
 function getExportPlaybackSpeed(){
   return Math.max(0.01,Math.min(10,Number(animationSpeed)||1));
 }
-
-function buildExportTimeline(total, frameCount=30){
+function getGifExportDurationMs(){
+  return Math.max(100,Math.min(30000,Number(gifExportDurationSec)*1000 || 1000));
+}
+function getGifExportFps(){
+  return Math.max(1,Math.min(100,Math.round(Number(gifExportFps)||30)));
+}
+function buildExportTimeline(total, fps=30){
   const duration=Math.max(1,Number(total)||1);
-  let count=Math.max(1,Math.min(900,Math.round(Number(frameCount)||1)));
+  const safeFps=Math.max(1,Math.min(120,Math.round(Number(fps)||30)));
+  let count=Math.max(1,Math.min(3000,Math.round(duration/1000*safeFps)));
   // GIFの表示時間は実質10ms単位なので、短時間に過剰なフレーム数を詰めて
   // 総時間が延びることを防ぎます。必要なら同一静止画を使っても時間軸は崩しません。
   if(count>1){
@@ -2112,10 +2184,12 @@ async function exportGif(mode){
   // 各出力フレームは「書き出し時間 × 再生速度」の位置から静止画として取得します。
   const playbackSpeed=getExportPlaybackSpeed();
   const sourceDuration=animationTotalDuration();
-  const exportDuration=Math.max(1,sourceDuration/playbackSpeed);
-  const requestedFrames=Math.max(2,Math.min(900,Math.round(Number(els.gifExportFrames.value)||30)));
-  els.gifExportFrames.value=requestedFrames;
-  const timeline=buildExportTimeline(exportDuration,requestedFrames);
+  const exportDuration=getGifExportDurationMs();
+  const fps=getGifExportFps();
+  els.gifExportDuration.value=(exportDuration/1000).toFixed(1);
+  els.gifExportDurationNumber.value=(exportDuration/1000).toFixed(1);
+  els.gifExportFps.value=fps;
+  const timeline=buildExportTimeline(exportDuration,fps);
   const workerScript=await getGifWorkerScript();
   const highQuality=mode==='gif-quality';
   const gif=new window.GIF({
@@ -2148,7 +2222,7 @@ async function exportGif(mode){
       if(!blob) return reject(new Error('GIFの生成結果が空です。'));
       const suffix=highQuality?'gif-high-quality':'gif-compatible';
       downloadBlob(blob,`composite-${suffix}.gif`);
-      els.exportStatus.textContent=`完了：${timeline.length}フレーム / 約${(exportDuration/1000).toFixed(2)}秒 / 再生速度${Math.round(playbackSpeed*100)}%`;
+      els.exportStatus.textContent=`完了：${timeline.length}フレーム / 約${(exportDuration/1000).toFixed(2)}秒 / ${fps}fps / 再生速度${Math.round(playbackSpeed*100)}%`;
       resolve(blob);
     }));
     gif.on('abort',finish(()=>reject(new Error('GIF書き出しを中止しました。'))));
@@ -2200,8 +2274,27 @@ async function runExport(){
 }
 function updateGifExportOptions(){
   const isGif=els.exportFormat.value==='gif-compatible' || els.exportFormat.value==='gif-quality';
-  els.gifExportFrames.disabled=!isGif;
-  els.gifFrameCountBlock.classList.toggle('is-disabled',!isGif);
+  els.gifExportDuration.disabled=!isGif;
+  els.gifExportDurationNumber.disabled=!isGif;
+  els.gifExportFps.disabled=!isGif;
+  els.gifDurationBlock.classList.toggle('is-disabled',!isGif);
+  els.gifFpsBlock.classList.toggle('is-disabled',!isGif);
+}
+function syncGifExportDurationUI(){
+  gifExportDurationSec=Math.max(0.1,Math.min(30,Math.round((Number(gifExportDurationSec)||1)*10)/10));
+  const value=gifExportDurationSec.toFixed(1);
+  els.gifExportDuration.value=value;
+  els.gifExportDurationNumber.value=value;
+}
+function syncGifExportFpsUI(){
+  gifExportFps=getGifExportFps();
+  els.gifExportFps.value=gifExportFps;
+}
+function syncGifExportDefaultsFromAnimation(force=false){
+  if(!force && gifExportDurationUserSet) return;
+  const sourceDuration=Math.max(100,Math.min(30000,animationTotalDuration()));
+  gifExportDurationSec=Math.max(0.1,Math.round((sourceDuration/1000)*10)/10);
+  syncGifExportDurationUI();
 }
 els.exportFormat.addEventListener('change',updateGifExportOptions);
 els.backgroundTransparent.addEventListener('change',()=>{
@@ -2214,9 +2307,16 @@ els.backgroundColor.addEventListener('input',()=>{
   syncBackgroundUI();
   render();
 });
-els.gifExportFrames.addEventListener('change',()=>{
-  const value=Math.max(2,Math.min(900,Math.round(Number(els.gifExportFrames.value)||30)));
-  els.gifExportFrames.value=value;
+function updateGifDurationFromInput(value){
+  gifExportDurationUserSet=true;
+  gifExportDurationSec=Math.max(0.1,Math.min(30,Math.round((Number(value)||1)*10)/10));
+  syncGifExportDurationUI();
+}
+els.gifExportDuration.addEventListener('input',()=>updateGifDurationFromInput(els.gifExportDuration.value));
+els.gifExportDurationNumber.addEventListener('change',()=>updateGifDurationFromInput(els.gifExportDurationNumber.value));
+els.gifExportFps.addEventListener('change',()=>{
+  gifExportFps=Math.max(1,Math.min(100,Math.round(Number(els.gifExportFps.value)||30)));
+  syncGifExportFpsUI();
 });
 updateGifExportOptions();
 
@@ -2253,7 +2353,7 @@ function serializeLayer(layer){
     w:Number(layer.w)||1,h:Number(layer.h)||1,baseW:Number(layer.baseW)||Number(layer.w)||1,baseH:Number(layer.baseH)||Number(layer.h)||1,
     rot:Number(layer.rot)||0,opacity:Number.isFinite(Number(layer.opacity))?Number(layer.opacity):1,zoom:Number(layer.zoom)||100,visible:layer.visible!==false,
     inAnimType:layer.inAnimType||'none',inAnimDuration:Number(layer.inAnimDuration)||0.6,loopAnimType:layer.loopAnimType||'none',
-    loopSpeed:Number(layer.loopSpeed)||1,loopIntensity:Number(layer.loopIntensity)||1
+    loopSpeed:Number(layer.loopSpeed)||1,loopIntensity:Number(layer.loopIntensity)||1,startTime:Math.max(0,Math.min(30,Number(layer.startTime)||0))
   };
 }
 async function buildProjectData(includeAssets){
@@ -2262,6 +2362,7 @@ async function buildProjectData(includeAssets){
     theme:document.documentElement.getAttribute('data-theme')||'light',
     canvas:{width:canvas.width,height:canvas.height,preset:els.canvasPreset.value,customCanvas:!!customCanvas,resolutionTierIndex:Number(resolutionTierIndex)||0,backgroundTransparent:!!backgroundTransparent,backgroundColor:normalizeHexColor(backgroundColor)},
     preview:{zoomPercent:Math.round(zoom*100),zoomAutoFit:!!zoomAutoFit},
+    export:{gifDurationSec:Number(gifExportDurationSec)||1,gifFps:getGifExportFps()},
     playback:{playing:!!animationPlaying,speed:Number(animationSpeed)||1,time:Number(animationTime)||0},
     selectedLayerId:selectedLayerId,selectedAssetId:els.assetPoolSelect.value||null,activeEditorTab:els.panelLayers.classList.contains('active')?'layers':'image',
     nextLayerId:Number(nextLayerId)||1,nextAssetId:Number(nextAssetId)||1,includeAssets:!!includeAssets,
@@ -2312,7 +2413,7 @@ function applyLoadedLayerData(raw,asset){
     totalDuration:asset?.totalDuration||Number(raw.totalDuration)||1,sourceWidth:asset?.width||Number(raw.sourceWidth)||1,sourceHeight:asset?.height||Number(raw.sourceHeight)||1,
     x:Number(raw.x)||0,y:Number(raw.y)||0,w:Math.max(1,Number(raw.w)||1),h:Math.max(1,Number(raw.h)||1),baseW:Math.max(1,Number(raw.baseW)||Number(raw.w)||1),baseH:Math.max(1,Number(raw.baseH)||Number(raw.h)||1),
     rot:Number(raw.rot)||0,opacity:Number.isFinite(Number(raw.opacity))?Math.max(0,Math.min(1,Number(raw.opacity))):1,zoom:Number(raw.zoom)||100,visible:raw.visible!==false,
-    inAnimType:raw.inAnimType||'none',inAnimDuration:Number(raw.inAnimDuration)||0.6,loopAnimType:raw.loopAnimType||'none',loopSpeed:Number(raw.loopSpeed)||1,loopIntensity:Number(raw.loopIntensity)||1
+    inAnimType:raw.inAnimType||'none',inAnimDuration:Number(raw.inAnimDuration)||0.6,loopAnimType:raw.loopAnimType||'none',loopSpeed:Number(raw.loopSpeed)||1,loopIntensity:Number(raw.loopIntensity)||1,startTime:Math.max(0,Math.min(30,Number(raw.startTime)||0))
   };
 }
 async function loadProjectData(file){
@@ -2329,10 +2430,16 @@ async function loadProjectData(file){
   backgroundColor = normalizeHexColor(c.backgroundColor || '#000000');
   syncBackgroundUI();
   els.canvasPreset.value=c.preset && (RATIO_DEFINITIONS[c.preset]||c.preset==='custom')?c.preset:'custom'; els.canvasPreset.dispatchEvent(new Event('optionsupdated')); customCanvas=!!c.customCanvas||els.canvasPreset.value==='custom'; resolutionTierIndex=Math.max(0,Math.min(RESOLUTION_TIERS.length-1,Number(c.resolutionTierIndex)||0)); updateResolutionUI();
+  const ex=project.export||{};
+  gifExportDurationUserSet=!!project.export;
+  gifExportDurationSec=Math.max(0.1,Math.min(30,Number(ex.gifDurationSec)||Math.max(0.1,Math.min(30,animationTotalDuration()/1000))));
+  gifExportFps=Math.max(1,Math.min(100,Math.round(Number(ex.gifFps)||30)));
+  syncGifExportDurationUI(); syncGifExportFpsUI();
   const p=project.preview||{}; zoomAutoFit=!!p.zoomAutoFit; setZoomFromValue(Math.max(5,Math.min(100,Number(p.zoomPercent)||50)),{manual:!zoomAutoFit}); if(zoomAutoFit) applyAutoFitZoom();
   const pb=project.playback||{}; animationSpeed=Math.max(0.01,Math.min(10,Number(pb.speed)||1)); els.gifSpeedNumber.value=Math.round(animationSpeed*100); els.gifSpeed.value=Math.max(25,Math.min(400,Math.round(animationSpeed*100))); updateRangeProgress(els.gifSpeed);
   const loadedLayers=[]; for(const raw of (Array.isArray(project.layers)?project.layers:[])){ const assetId=idMap.get(String(raw.assetId)); const asset=assetId===undefined?null:getAsset(assetId); if(asset) loadedLayers.push(applyLoadedLayerData(raw,asset)); }
   layers=loadedLayers; selectedLayerId=project.selectedLayerId!=null&&layers.some(l=>l.id===Number(project.selectedLayerId))?Number(project.selectedLayerId):(layers[0]?.id||null);
+  if(!project.export){ gifExportDurationUserSet=false; syncGifExportDefaultsFromAnimation(true); }
   nextLayerId=Math.max(Number(project.nextLayerId)||1,...layers.map(l=>Number(l.id)||0))+1; nextAssetId=Math.max(Number(project.nextAssetId)||1,...assetPool.map(a=>Number(a.id)||0))+1;
   animationTime=Math.max(0,Number(pb.time)||0); animationPlaying=!!pb.playing; lastAnimationTimestamp=performance.now();
   populateAssetPool(project.selectedAssetId||assetPool[0]?.id||null); renderLayerUI(); syncControls(); render(); setEditorTab(project.activeEditorTab==='layers'?'layers':(layers.length?'image':'layers'),false);
