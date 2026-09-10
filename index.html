@@ -955,10 +955,13 @@ function parseGifArrayBuffer(buffer){
         };
       }else if(label===0x01){
         // Plain Text Extension: 固定長12バイト + Data Sub-block。
+        // GCEは直後のGraphic Rendering Blockにだけ適用されるため、
+        // Plain Text Extensionを読み飛ばした時点で消費する。
         const blockSize=readU8();
         if(blockSize!==12) fail(`Plain Text Extensionのサイズが12ではありません: ${blockSize}`);
         readBytes(12);
         skipSubBlocks();
+        gce=null;
       }else if(label===0xFF){
         const blockSize=readU8();
         if(blockSize!==11) fail(`Application Extensionのサイズが11ではありません: ${blockSize}`);
@@ -995,6 +998,10 @@ function parseGifArrayBuffer(buffer){
     const lct=lctFlag?readColorTable(lctSize):null;
     const palette=lct||gct;
     if(!palette) fail(`フレーム${frames.length+1}: カラーテーブルがありません。`);
+    // Image Descriptorの領域がLogical Screen外へ出るGIFは、各ブラウザや
+    // デコーダーで解釈差が出やすいため、完全に拒否せず描画時にクリップできる
+    // 形で保持する。ただし、領域計算そのものが不正になる値は明示的に拒否する。
+    if(left+frameW>65535 || top+frameH>65535) fail(`フレーム${frames.length+1}: フレーム領域の計算値が不正です。`);
     if(gce?.transparentIndex!==null && gce?.transparentIndex!==undefined && gce.transparentIndex>=palette.length){
       fail(`フレーム${frames.length+1}: 透明色インデックスがパレット範囲外です。`);
     }
@@ -1048,6 +1055,7 @@ function gifLzwDecode(data,minCodeSize,expectedSize){
     throw new Error('LZWの期待出力サイズが不正です。');
   }
 
+  // GIF LZWの最大辞書エントリは4096（12bit）。
   const MAX_CODES=4096;
   const clearCode=1<<minCodeSize;
   const endCode=clearCode+1;
@@ -1055,17 +1063,13 @@ function gifLzwDecode(data,minCodeSize,expectedSize){
   const suffix=new Uint8Array(MAX_CODES);
   const pixelStack=new Uint8Array(MAX_CODES+1);
   const output=new Uint8Array(expectedSize);
-  const nullCode=-1;
 
-  for(let i=0;i<clearCode;i++){
-    prefix[i]=0;
-    suffix[i]=i;
-  }
+  for(let i=0;i<clearCode;i++) suffix[i]=i;
 
   let available=clearCode+2;
   let codeSize=minCodeSize+1;
   let codeMask=(1<<codeSize)-1;
-  let oldCode=nullCode;
+  let oldCode=-1;
   let first=0;
   let datum=0;
   let bits=0;
@@ -1087,93 +1091,92 @@ function gifLzwDecode(data,minCodeSize,expectedSize){
     return code;
   };
 
-  while(outPos<expectedSize){
-    if(top===0){
-      const code=readCode();
-      if(code===null) break;
-
-      if(code===clearCode){
-        codeSize=minCodeSize+1;
-        codeMask=(1<<codeSize)-1;
-        available=clearCode+2;
-        oldCode=nullCode;
-        sawClear=true;
-        continue;
-      }
-      if(code===endCode){
-        sawEnd=true;
-        break;
-      }
-      if(code>available || code>4095){
-        throw new Error(`未定義のLZWコードです: ${code} (next=${available}, codeSize=${codeSize})`);
-      }
-      if(oldCode===nullCode){
-        if(code>=clearCode){
-          throw new Error('最初のLZWデータコードが不正です。');
-        }
-        pixelStack[top++]=suffix[code];
-        oldCode=code;
-        first=code;
-      }else{
-        const inCode=code;
-        let codeForSequence;
-        if(code===available){
-          if(available>=MAX_CODES){
-            throw new Error('LZW辞書が満杯の状態で未定義コードが現れました。');
-          }
-          pixelStack[top++]=first;
-          codeForSequence=oldCode;
-        }else{
-          codeForSequence=code;
-        }
-        let sequenceCode=codeForSequence;
-        if(sequenceCode>=MAX_CODES){
-          throw new Error('LZW辞書参照が範囲外です。');
-        }
-        while(sequenceCode>clearCode){
-          if(sequenceCode>=available || top>=pixelStack.length){
-            throw new Error('LZW辞書参照が不正です。');
-          }
-          pixelStack[top++]=suffix[sequenceCode];
-          sequenceCode=prefix[sequenceCode];
-        }
-        if(sequenceCode<0 || sequenceCode>=clearCode){
-          throw new Error('LZW辞書の終端が不正です。');
-        }
-        first=suffix[sequenceCode]&0xff;
-        if(top>=pixelStack.length){
-          throw new Error('LZW展開スタックがオーバーフローしました。');
-        }
-        pixelStack[top++]=first;
-
-        if(available<MAX_CODES){
-          prefix[available]=oldCode;
-          suffix[available]=first;
-          available++;
-          if((available & codeMask)===0 && available<MAX_CODES && codeSize<12){
-            codeSize++;
-            codeMask=(1<<codeSize)-1;
-          }
-        }
-        oldCode=inCode;
-      }
-
-      if(!sawClear && oldCode!==nullCode){
-        // Clear Codeを省略する非標準GIFも、辞書が未初期化のままにならない範囲で受理。
-        sawClear=true;
-      }
-    }
-
+  while(true){
     if(top>0){
       output[outPos++]=pixelStack[--top];
+      if(outPos===expectedSize) break;
+      continue;
     }
+
+    const code=readCode();
+    if(code===null) break;
+    if(code===clearCode){
+      available=clearCode+2;
+      codeSize=minCodeSize+1;
+      codeMask=(1<<codeSize)-1;
+      oldCode=-1;
+      sawClear=true;
+      continue;
+    }
+    if(code===endCode){
+      sawEnd=true;
+      break;
+    }
+    if(code>4095){
+      throw new Error(`LZWコードが12bit範囲を超えています: ${code}`);
+    }
+    if(oldCode===-1){
+      if(code>=clearCode){
+        throw new Error('最初のLZWデータコードが不正です。');
+      }
+      pixelStack[top++]=suffix[code];
+      oldCode=code;
+      first=suffix[code];
+      if(!sawClear) sawClear=true;
+      continue;
+    }
+
+    const inCode=code;
+    let sequenceCode=code;
+    if(code===available){
+      // KwKwKケース: 直前文字列 + その先頭文字。
+      if(available>=MAX_CODES){
+        throw new Error('LZW辞書が満杯のためKwKwKを処理できません。');
+      }
+      pixelStack[top++]=first;
+      sequenceCode=oldCode;
+    }else if(code>available){
+      throw new Error(`未定義のLZWコードです: ${code} (next=${available}, codeSize=${codeSize})`);
+    }
+
+    // 辞書チェーンを逆順にスタックへ積む。
+    while(sequenceCode>=clearCode){
+      if(sequenceCode<0 || sequenceCode>=available || sequenceCode>=MAX_CODES){
+        throw new Error('LZW辞書参照が不正です。');
+      }
+      if(top>=pixelStack.length){
+        throw new Error('LZW展開スタックがオーバーフローしました。');
+      }
+      pixelStack[top++]=suffix[sequenceCode];
+      sequenceCode=prefix[sequenceCode];
+    }
+    if(sequenceCode<0 || sequenceCode>=clearCode){
+      throw new Error('LZW辞書の終端が不正です。');
+    }
+    first=suffix[sequenceCode];
+    if(top>=pixelStack.length){
+      throw new Error('LZW展開スタックがオーバーフローしました。');
+    }
+    pixelStack[top++]=first;
+
+    // 直前文字列 + 現在文字列の先頭文字を辞書へ追加。
+    if(available<MAX_CODES){
+      prefix[available]=oldCode;
+      suffix[available]=first;
+      available++;
+      // 次のコードが現在のコード幅を必要とする境界で1bit拡張する。
+      if(available=== (1<<codeSize) && codeSize<12){
+        codeSize++;
+        codeMask=(1<<codeSize)-1;
+      }
+    }
+    oldCode=inCode;
   }
 
   if(outPos!==expectedSize){
     throw new Error(`LZW展開画素数が不足しています: ${outPos}/${expectedSize}`);
   }
-  // 仕様上End Codeが望ましいが、既に全画素を完全に展開できた場合は互換性のため受理する。
-  // ただしEnd Codeが存在する場合は必ずそこでデコードを終了する。
+  // End Codeは通常必要だが、期待画素数を完全に展開できた場合は互換性のため受理する。
   return output;
 }
 
