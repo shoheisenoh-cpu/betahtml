@@ -820,7 +820,7 @@ input[type=range]::-moz-range-thumb{
             <button id="duplicateLayerBtn" style="flex:1">選択レイヤーを複製</button>
             <button id="deleteLayerBtn" class="danger" style="flex:1">選択レイヤーを削除</button>
           </div>
-          <p class="tip" style="margin-top:9px">回転と不透明度は、スライダー外の値も数値入力で直接指定できます。</p>
+          <p class="tip" style="margin-top:9px">回転と不透明度は、スライダー外の値も数値入力で直接指定できます。アーチは0%で通常の直線、正負で湾曲方向を切り替えます。</p>
         </section>
 
 
@@ -844,6 +844,13 @@ input[type=range]::-moz-range-thumb{
                 <div><label for="textFontSize">文字サイズ</label><div class="unit-input"><input id="textFontSize" type="number" min="8" max="1000" step="1" value="96"><span class="unit">px</span></div></div>
                 <div><label for="textAlign">整列</label><select id="textAlign"><option value="left">左揃え</option><option value="center" selected>中央揃え</option><option value="right">右揃え</option></select></div>
                 <div><label for="textLineHeight">行間</label><div class="unit-input"><input id="textLineHeight" type="number" min="0.5" max="3" step="0.05" value="1.25"><span class="unit">倍</span></div></div>
+                <div>
+                  <label for="textArch">アーチ</label>
+                  <div class="content-range-with-number">
+                    <div class="unit-input"><input id="textArchNumber" type="number" min="-100" max="100" step="1" value="0"><span class="unit">%</span></div>
+                    <input id="textArch" type="range" min="-100" max="100" step="1" value="0" aria-label="文字のアーチ量">
+                  </div>
+                </div>
                 <div><label for="textStrokeWidth">縁取り幅</label><div class="unit-input"><input id="textStrokeWidth" type="number" min="0" max="50" step="1" value="0"><span class="unit">px</span></div></div>
                 <div><label for="textColor">文字色</label><div class="content-color-row"><input id="textColor" type="color" value="#ffffff" aria-label="文字色"><span id="textColorCode" class="content-color-code">#FFFFFF</span></div></div>
                 <div><label for="textStrokeColor">縁取り色</label><div class="content-color-row"><input id="textStrokeColor" type="color" value="#000000" aria-label="縁取り色"><span id="textStrokeColorCode" class="content-color-code">#000000</span></div></div>
@@ -1084,6 +1091,8 @@ const els = {
   textFontSize: document.getElementById('textFontSize'),
   textAlign: document.getElementById('textAlign'),
   textLineHeight: document.getElementById('textLineHeight'),
+  textArch: document.getElementById('textArch'),
+  textArchNumber: document.getElementById('textArchNumber'),
   textColor: document.getElementById('textColor'),
   textColorCode: document.getElementById('textColorCode'),
   textStrokeColor: document.getElementById('textStrokeColor'),
@@ -1976,7 +1985,7 @@ function populateAssetPool(preferredId=null){
 function getAsset(assetId){ return assetPool.find(a=>String(a.id)===String(assetId)) || null; }
 function createTextLayer(text='テキスト'){
   const fontSize=96,w=Math.max(320,Math.min(canvas.width*.78,900)),h=Math.max(120,fontSize*1.8);
-  return {id:nextLayerId++,name:'テキスト',assetId:null,kind:'text',frames:[],frameDurations:[],totalDuration:1000,sourceWidth:w,sourceHeight:h,x:(canvas.width-w)/2,y:(canvas.height-h)/2,w,h,baseW:w,baseH:h,rot:0,opacity:1,zoom:100,visible:true,text:String(text||'テキスト'),fontFamily:'Noto Sans JP',fontSize,fontWeight:700,textAlign:'center',lineHeight:1.25,textColor:'#ffffff',textStrokeColor:'#000000',textStrokeWidth:0,textShadowEnabled:false,textShadowColor:'#000000',textShadowOpacity:0.45,textShadowOffsetX:4,textShadowOffsetY:4,textShadowBlur:8,textShadowSpread:0,imageFit:'stretch',inAnimType:'none',inAnimDuration:0.6,loopAnimType:'none',loopSpeed:1,loopIntensity:1,exitAnimType:'none',inAnimIntensity:1,exitAnimIntensity:1,animationIntensity:1,startTime:0,endTime:0};
+  return {id:nextLayerId++,name:'テキスト',assetId:null,kind:'text',frames:[],frameDurations:[],totalDuration:1000,sourceWidth:w,sourceHeight:h,x:(canvas.width-w)/2,y:(canvas.height-h)/2,w,h,baseW:w,baseH:h,rot:0,opacity:1,zoom:100,visible:true,text:String(text||'テキスト'),fontFamily:'Noto Sans JP',fontSize,fontWeight:700,textAlign:'center',lineHeight:1.25,textArch:0,textColor:'#ffffff',textStrokeColor:'#000000',textStrokeWidth:0,textShadowEnabled:false,textShadowColor:'#000000',textShadowOpacity:0.45,textShadowOffsetX:4,textShadowOffsetY:4,textShadowBlur:8,textShadowSpread:0,imageFit:'stretch',inAnimType:'none',inAnimDuration:0.6,loopAnimType:'none',loopSpeed:1,loopIntensity:1,exitAnimType:'none',inAnimIntensity:1,exitAnimIntensity:1,animationIntensity:1,startTime:0,endTime:0};
 }
 function addTextLayer(){const layer=createTextLayer('テキスト');layers.push(layer);selectedLayerId=layer.id;animationTime=0;els.assetPoolSelect.value='__text__';syncAssetAddButton();renderLayerUI();syncControls();syncContentControls();render();setEditorTab('content',true);els.gifStatus.textContent='テキストレイヤーを追加しました。コンテンツタブから文字を編集できます。';}
 function createLayerFromAsset(asset){
@@ -2255,11 +2264,11 @@ function syncContentControls(){
   els.contentEmptyState.hidden=has;
   els.textContentSection.hidden=!has||layer.kind!=='text';
   els.imageContentSection.hidden=!has||layer.kind==='text';
-  const controls=[els.textContent,els.textFontFamily,els.textFontWeight,els.textFontSize,els.textAlign,els.textLineHeight,els.textColor,els.textStrokeColor,els.textStrokeWidth,els.textShadowEnabled,els.textShadowColor,els.textShadowOpacity,els.textShadowOpacityNumber,els.textShadowOffsetX,els.textShadowOffsetXNumber,els.textShadowOffsetY,els.textShadowOffsetYNumber,els.textShadowBlur,els.textShadowBlurNumber,els.textShadowSpread,els.textShadowSpreadNumber,els.imageContentAsset,els.imageFit,els.imageHue,els.imageHueNumber,els.imageBrightness,els.imageBrightnessNumber,els.imageContrast,els.imageContrastNumber,els.imageSaturation,els.imageSaturationNumber,els.imageGrayscale,els.imageGrayscaleNumber,els.imageSepia,els.imageSepiaNumber,els.imageBlur,els.imageBlurNumber,els.imageSkewX,els.imageSkewXNumber,els.imageSkewY,els.imageSkewYNumber];
+  const controls=[els.textContent,els.textFontFamily,els.textFontWeight,els.textFontSize,els.textAlign,els.textLineHeight,els.textArch,els.textArchNumber,els.textColor,els.textStrokeColor,els.textStrokeWidth,els.textShadowEnabled,els.textShadowColor,els.textShadowOpacity,els.textShadowOpacityNumber,els.textShadowOffsetX,els.textShadowOffsetXNumber,els.textShadowOffsetY,els.textShadowOffsetYNumber,els.textShadowBlur,els.textShadowBlurNumber,els.textShadowSpread,els.textShadowSpreadNumber,els.imageContentAsset,els.imageFit,els.imageHue,els.imageHueNumber,els.imageBrightness,els.imageBrightnessNumber,els.imageContrast,els.imageContrastNumber,els.imageSaturation,els.imageSaturationNumber,els.imageGrayscale,els.imageGrayscaleNumber,els.imageSepia,els.imageSepiaNumber,els.imageBlur,els.imageBlurNumber,els.imageSkewX,els.imageSkewXNumber,els.imageSkewY,els.imageSkewYNumber];
   if(!has){ controls.forEach(el=>{if(el)el.disabled=true;}); els.replaceImageAssetBtn.disabled=true; els.textContent.value=''; updateContentColorCodes(); return; }
   controls.forEach(el=>{if(el)el.disabled=false;});
   if(layer.kind==='text'){
-    els.textContent.value=String(layer.text??''); els.textFontFamily.value=layer.fontFamily||'Noto Sans JP'; els.textFontFamily.dispatchEvent(new Event('optionsupdated')); els.textFontWeight.value=String(layer.fontWeight||700); els.textFontWeight.dispatchEvent(new Event('optionsupdated')); els.textFontSize.value=Math.max(8,Math.min(1000,Math.round(Number(layer.fontSize)||96))); els.textAlign.value=layer.textAlign||'center'; els.textAlign.dispatchEvent(new Event('optionsupdated')); els.textLineHeight.value=Number(layer.lineHeight)||1.25; els.textColor.value=normalizeHexColor(layer.textColor||'#ffffff'); els.textStrokeColor.value=normalizeHexColor(layer.textStrokeColor||'#000000'); els.textStrokeWidth.value=Math.max(0,Math.min(50,Number(layer.textStrokeWidth)||0)); els.textShadowEnabled.checked=layer.textShadowEnabled===true; els.textShadowColor.value=normalizeHexColor(layer.textShadowColor||'#000000'); els.textShadowOpacity.value=Math.round(Math.max(0,Math.min(100,(Number(layer.textShadowOpacity)||0.45)*100))); els.textShadowOpacityNumber.value=els.textShadowOpacity.value; els.textShadowOffsetX.value=Math.round(Math.max(-100,Math.min(100,Number(layer.textShadowOffsetX)||0))); els.textShadowOffsetXNumber.value=els.textShadowOffsetX.value; els.textShadowOffsetY.value=Math.round(Math.max(-100,Math.min(100,Number(layer.textShadowOffsetY)||0))); els.textShadowOffsetYNumber.value=els.textShadowOffsetY.value; els.textShadowBlur.value=Math.round(Math.max(0,Math.min(100,Number(layer.textShadowBlur)||0))); els.textShadowBlurNumber.value=els.textShadowBlur.value; els.textShadowSpread.value=Math.round(Math.max(0,Math.min(50,Number(layer.textShadowSpread)||0))); els.textShadowSpreadNumber.value=els.textShadowSpread.value; updateRangeProgress(els.textShadowOpacity); updateRangeProgress(els.textShadowOffsetX); updateRangeProgress(els.textShadowOffsetY); updateRangeProgress(els.textShadowSpread); updateRangeProgress(els.textShadowBlur); updateContentColorCodes();
+    els.textContent.value=String(layer.text??''); els.textFontFamily.value=layer.fontFamily||'Noto Sans JP'; els.textFontFamily.dispatchEvent(new Event('optionsupdated')); els.textFontWeight.value=String(layer.fontWeight||700); els.textFontWeight.dispatchEvent(new Event('optionsupdated')); els.textFontSize.value=Math.max(8,Math.min(1000,Math.round(Number(layer.fontSize)||96))); els.textAlign.value=layer.textAlign||'center'; els.textAlign.dispatchEvent(new Event('optionsupdated')); els.textLineHeight.value=Number(layer.lineHeight)||1.25; els.textArch.value=Math.max(-100,Math.min(100,Number(layer.textArch)||0)); els.textArchNumber.value=els.textArch.value; updateRangeProgress(els.textArch); els.textColor.value=normalizeHexColor(layer.textColor||'#ffffff'); els.textStrokeColor.value=normalizeHexColor(layer.textStrokeColor||'#000000'); els.textStrokeWidth.value=Math.max(0,Math.min(50,Number(layer.textStrokeWidth)||0)); els.textShadowEnabled.checked=layer.textShadowEnabled===true; els.textShadowColor.value=normalizeHexColor(layer.textShadowColor||'#000000'); els.textShadowOpacity.value=Math.round(Math.max(0,Math.min(100,(Number(layer.textShadowOpacity)||0.45)*100))); els.textShadowOpacityNumber.value=els.textShadowOpacity.value; els.textShadowOffsetX.value=Math.round(Math.max(-100,Math.min(100,Number(layer.textShadowOffsetX)||0))); els.textShadowOffsetXNumber.value=els.textShadowOffsetX.value; els.textShadowOffsetY.value=Math.round(Math.max(-100,Math.min(100,Number(layer.textShadowOffsetY)||0))); els.textShadowOffsetYNumber.value=els.textShadowOffsetY.value; els.textShadowBlur.value=Math.round(Math.max(0,Math.min(100,Number(layer.textShadowBlur)||0))); els.textShadowBlurNumber.value=els.textShadowBlur.value; els.textShadowSpread.value=Math.round(Math.max(0,Math.min(50,Number(layer.textShadowSpread)||0))); els.textShadowSpreadNumber.value=els.textShadowSpread.value; updateRangeProgress(els.textShadowOpacity); updateRangeProgress(els.textShadowOffsetX); updateRangeProgress(els.textShadowOffsetY); updateRangeProgress(els.textShadowSpread); updateRangeProgress(els.textShadowBlur); updateContentColorCodes();
   }else{
     syncContentAssetOptions(layer.assetId); els.imageFit.value=layer.imageFit||'stretch'; els.imageFit.dispatchEvent(new Event('optionsupdated')); setImageContentValue('imageHue',Number(layer.imageHue)||0); setImageContentValue('imageBrightness',Number.isFinite(Number(layer.imageBrightness))?Number(layer.imageBrightness):100); setImageContentValue('imageContrast',Number.isFinite(Number(layer.imageContrast))?Number(layer.imageContrast):100); setImageContentValue('imageSaturation',Number.isFinite(Number(layer.imageSaturation))?Number(layer.imageSaturation):100); setImageContentValue('imageGrayscale',Number(layer.imageGrayscale)||0); setImageContentValue('imageSepia',Number(layer.imageSepia)||0); setImageContentValue('imageBlur',Number(layer.imageBlur)||0); setImageContentValue('imageSkewX',Number(layer.imageSkewX)||0); setImageContentValue('imageSkewY',Number(layer.imageSkewY)||0); els.replaceImageAssetBtn.disabled=!assetPool.length;
   }
@@ -2349,33 +2358,124 @@ function replaceSelectedImageAsset(assetId){const layer=getSelectedLayer(),asset
 function wrapCanvasText(targetCtx,text,maxWidth){const paragraphs=String(text??'').replace(/\r\n/g,'\n').split('\n'),lines=[];paragraphs.forEach(paragraph=>{if(paragraph===''){lines.push('');return;}let line='';for(const ch of Array.from(paragraph)){const test=line+ch;if(line&&targetCtx.measureText(test).width>maxWidth){lines.push(line);line=ch;}else line=test;}lines.push(line);});return lines.length?lines:[''];}
 function drawTextLayerBase(layer,targetCtx){
   const fontSize=Math.max(8,Number(layer.fontSize)||96),weight=Number(layer.fontWeight)||700,fontFamily=layer.fontFamily||'Noto Sans JP',lineHeight=Math.max(.5,Math.min(3,Number(layer.lineHeight)||1.25));
+  const arch=Math.max(-100,Math.min(100,Number(layer.textArch)||0));
   targetCtx.font=`${weight} ${fontSize}px "${fontFamily}", sans-serif`;
-  targetCtx.textAlign=layer.textAlign||'center';
+  targetCtx.textAlign='center';
   targetCtx.textBaseline='middle';
   targetCtx.lineJoin='round';
   targetCtx.lineWidth=Math.max(0,Number(layer.textStrokeWidth)||0);
   targetCtx.strokeStyle=normalizeHexColor(layer.textStrokeColor||'#000000');
   targetCtx.fillStyle=normalizeHexColor(layer.textColor||'#ffffff');
-  const lines=wrapCanvasText(targetCtx,layer.text||'',Math.max(20,layer.w-20)),linePx=fontSize*lineHeight,total=lines.length*linePx,top=-total/2+linePx/2,textX=layer.textAlign==='left'?-layer.w/2+10:(layer.textAlign==='right'?layer.w/2-10:0);
+
+  const maxWidth=Math.max(20,layer.w-20);
+  const lines=wrapCanvasText(targetCtx,layer.text||'',maxWidth);
+  const linePx=fontSize*lineHeight;
+  const total=lines.length*linePx;
+
+  const drawGlyph=(ctx, glyph, gx, gy, rotation, strokeWidth)=>{
+    ctx.save();
+    ctx.translate(gx,gy);
+    ctx.rotate(rotation);
+    if(strokeWidth>0) ctx.strokeText(glyph,0,0);
+    ctx.fillText(glyph,0,0);
+    ctx.restore();
+  };
+
+  const drawLineNormal=(line,centerY,shadowMode=false)=>{
+    const alignOffset=layer.textAlign==='left' ? -layer.w/2+10 : (layer.textAlign==='right' ? layer.w/2-10 : 0);
+    if(shadowMode){
+      targetCtx.lineWidth=Math.max(0,Number(layer.textStrokeWidth)||0)+Math.max(0,Math.min(50,Number(layer.textShadowSpread)||0))*2;
+      targetCtx.fillText(line,alignOffset,centerY);
+      if(targetCtx.lineWidth>0) targetCtx.strokeText(line,alignOffset,centerY);
+      return;
+    }
+    targetCtx.lineWidth=Math.max(0,Number(layer.textStrokeWidth)||0);
+    if(targetCtx.lineWidth>0) targetCtx.strokeText(line,alignOffset,centerY);
+    targetCtx.fillText(line,alignOffset,centerY);
+  };
+
+  const drawLineArch=(line,centerY,shadowMode=false)=>{
+    const chars=Array.from(line||'');
+    if(!chars.length) return;
+
+    const widths=chars.map(ch=>Math.max(1,targetCtx.measureText(ch).width));
+    const totalWidth=widths.reduce((sum,w)=>sum+w,0);
+    const usableWidth=Math.max(1,maxWidth);
+    const scale=Math.min(1,usableWidth/totalWidth);
+    const gap=fontSize*0.01;
+    const scaledWidths=widths.map(w=>w*scale);
+    const scaledGap=gap*scale;
+    const occupied=scaledWidths.reduce((sum,w)=>sum+w,0)+Math.max(0,chars.length-1)*scaledGap;
+    const startX=-occupied/2;
+    const arcMagnitude=Math.min(layer.h*0.42,fontSize*2.2)*Math.abs(arch)/100;
+    const direction=arch>=0?-1:1;
+
+    let cursor=startX;
+    chars.forEach((ch,index)=>{
+      const charW=scaledWidths[index];
+      const centerX=cursor+charW/2;
+      const t=occupied<=1?0:(centerX-startX)/occupied;
+      const normalized=t*2-1;
+      const centerCurve=(1-normalized*normalized);
+      const y=centerY + direction*arcMagnitude*centerCurve;
+
+      // 接線方向。中心付近ほど水平、端ほど傾く。
+      const derivative=-2*normalized;
+      const tangentScale=arcMagnitude/Math.max(1,occupied);
+      const rotation=Math.atan2(direction*derivative*tangentScale,1);
+
+      targetCtx.save();
+      targetCtx.translate(centerX,y);
+      targetCtx.rotate(rotation);
+
+      if(shadowMode){
+        const sw=Math.max(0,Number(layer.textStrokeWidth)||0)+Math.max(0,Math.min(50,Number(layer.textShadowSpread)||0))*2;
+        targetCtx.lineWidth=sw;
+        if(sw>0) targetCtx.strokeText(ch,0,0);
+        targetCtx.fillText(ch,0,0);
+      }else{
+        const sw=Math.max(0,Number(layer.textStrokeWidth)||0);
+        targetCtx.lineWidth=sw;
+        if(sw>0) targetCtx.strokeText(ch,0,0);
+        targetCtx.fillText(ch,0,0);
+      }
+      targetCtx.restore();
+
+      cursor+=charW+scaledGap;
+    });
+  };
+
+  const drawLine=(line,centerY,shadowMode=false)=>{
+    if(Math.abs(arch)<0.001){
+      drawLineNormal(line,centerY,shadowMode);
+    }else{
+      drawLineArch(line,centerY,shadowMode);
+    }
+  };
+
+  const top=-total/2+linePx/2;
   if(layer.textShadowEnabled!==false && (Number(layer.textShadowOpacity)||0)>0){
     targetCtx.save();
     targetCtx.shadowColor=hexToRgba(layer.textShadowColor||'#000000',Math.max(0,Math.min(1,Number(layer.textShadowOpacity)||0.45)));
     targetCtx.shadowBlur=Math.max(0,Math.min(100,Number(layer.textShadowBlur)||0));
     targetCtx.shadowOffsetX=Math.max(-100,Math.min(100,Number(layer.textShadowOffsetX)||0));
     targetCtx.shadowOffsetY=Math.max(-100,Math.min(100,Number(layer.textShadowOffsetY)||0));
-    targetCtx.lineWidth=Math.max(0,Number(layer.textStrokeWidth)||0)+Math.max(0,Math.min(50,Number(layer.textShadowSpread)||0))*2;
-    lines.forEach((line,index)=>{const y=top+index*linePx;if(targetCtx.lineWidth>0)targetCtx.strokeText(line,textX,y,Math.max(20,layer.w-20));targetCtx.fillText(line,textX,y,Math.max(20,layer.w-20));});
+    lines.forEach((line,index)=>drawLine(line,top+index*linePx,true));
     targetCtx.restore();
     return;
   }
-  lines.forEach((line,index)=>{const y=top+index*linePx;if((Number(layer.textStrokeWidth)||0)>0)targetCtx.strokeText(line,textX,y,Math.max(20,layer.w-20));targetCtx.fillText(line,textX,y,Math.max(20,layer.w-20));});
+
+  lines.forEach((line,index)=>drawLine(line,top+index*linePx,false));
 }
+
 els.textContent.addEventListener('input',()=>updateSelectedTextLayer({text:els.textContent.value}));
 els.textFontFamily.addEventListener('change',()=>updateSelectedTextLayer({fontFamily:els.textFontFamily.value}));
 els.textFontWeight.addEventListener('change',()=>updateSelectedTextLayer({fontWeight:Number(els.textFontWeight.value)||700}));
 els.textFontSize.addEventListener('input',()=>updateSelectedTextLayer({fontSize:Math.max(8,Math.min(1000,Number(els.textFontSize.value)||96))}));
 els.textAlign.addEventListener('change',()=>updateSelectedTextLayer({textAlign:els.textAlign.value}));
 els.textLineHeight.addEventListener('input',()=>updateSelectedTextLayer({lineHeight:Math.max(.5,Math.min(3,Number(els.textLineHeight.value)||1.25))}));
+els.textArch.addEventListener('input',()=>updateSelectedTextLayer({textArch:Math.max(-100,Math.min(100,Number(els.textArch.value)||0))}));
+els.textArchNumber.addEventListener('input',()=>{const n=Math.max(-100,Math.min(100,Number(els.textArchNumber.value)||0));els.textArch.value=n;updateRangeProgress(els.textArch);updateSelectedTextLayer({textArch:n});});
 els.textColor.addEventListener('input',()=>{updateSelectedTextLayer({textColor:normalizeHexColor(els.textColor.value)});updateContentColorCodes();});
 els.textStrokeColor.addEventListener('input',()=>{updateSelectedTextLayer({textStrokeColor:normalizeHexColor(els.textStrokeColor.value)});updateContentColorCodes();});
 els.textStrokeWidth.addEventListener('input',()=>updateSelectedTextLayer({textStrokeWidth:Math.max(0,Math.min(50,Number(els.textStrokeWidth.value)||0))}));
@@ -3392,7 +3492,7 @@ function serializeLayer(layer){
     w:Number(layer.w)||1,h:Number(layer.h)||1,baseW:Number(layer.baseW)||Number(layer.w)||1,baseH:Number(layer.baseH)||Number(layer.h)||1,
     rot:Number(layer.rot)||0,opacity:Number.isFinite(Number(layer.opacity))?Number(layer.opacity):1,zoom:Number(layer.zoom)||100,visible:layer.visible!==false,
     inAnimType:layer.inAnimType||'none',inAnimDuration:Number(layer.inAnimDuration)||0.6,loopAnimType:layer.loopAnimType||'none',
-    loopSpeed:Number(layer.loopSpeed)||1,loopIntensity:Number(layer.loopIntensity)||1,inAnimIntensity:Number(layer.inAnimIntensity)||1,exitAnimIntensity:Number(layer.exitAnimIntensity)||1,animationIntensity:Number(layer.animationIntensity)||1,startTime:Math.max(0,Math.min(30,Number(layer.startTime)||0)),exitAnimType:layer.exitAnimType||'none',endTime:Math.max(0,Math.min(30,Number.isFinite(Number(layer.endTime))?Number(layer.endTime):getLayerDefaultEndTimeSec(layer))),text:String(layer.text??''),fontFamily:String(layer.fontFamily||'Noto Sans JP'),fontSize:Number(layer.fontSize)||96,fontWeight:Number(layer.fontWeight)||700,textAlign:String(layer.textAlign||'center'),lineHeight:Number(layer.lineHeight)||1.25,textColor:normalizeHexColor(layer.textColor||'#ffffff'),textStrokeColor:normalizeHexColor(layer.textStrokeColor||'#000000'),textStrokeWidth:Number(layer.textStrokeWidth)||0,textShadowEnabled:layer.textShadowEnabled!==false,textShadowColor:normalizeHexColor(layer.textShadowColor||'#000000'),textShadowOpacity:Number.isFinite(Number(layer.textShadowOpacity))?Number(layer.textShadowOpacity):0.45,textShadowOffsetX:Number(layer.textShadowOffsetX)||0,textShadowOffsetY:Number(layer.textShadowOffsetY)||0,textShadowBlur:Number(layer.textShadowBlur)||0,textShadowSpread:Number.isFinite(Number(layer.textShadowSpread))?Math.max(0,Math.min(50,Number(layer.textShadowSpread))):0,imageFit:String(layer.imageFit||'stretch'),imageHue:Number(layer.imageHue)||0,imageBrightness:Number.isFinite(Number(layer.imageBrightness))?Number(layer.imageBrightness):100,imageContrast:Number.isFinite(Number(layer.imageContrast))?Number(layer.imageContrast):100,imageSaturation:Number.isFinite(Number(layer.imageSaturation))?Number(layer.imageSaturation):100,imageGrayscale:Number(layer.imageGrayscale)||0,imageSepia:Number(layer.imageSepia)||0,imageBlur:Number(layer.imageBlur)||0,imageSkewX:Number(layer.imageSkewX)||0,imageSkewY:Number(layer.imageSkewY)||0
+    loopSpeed:Number(layer.loopSpeed)||1,loopIntensity:Number(layer.loopIntensity)||1,inAnimIntensity:Number(layer.inAnimIntensity)||1,exitAnimIntensity:Number(layer.exitAnimIntensity)||1,animationIntensity:Number(layer.animationIntensity)||1,startTime:Math.max(0,Math.min(30,Number(layer.startTime)||0)),exitAnimType:layer.exitAnimType||'none',endTime:Math.max(0,Math.min(30,Number.isFinite(Number(layer.endTime))?Number(layer.endTime):getLayerDefaultEndTimeSec(layer))),text:String(layer.text??''),fontFamily:String(layer.fontFamily||'Noto Sans JP'),fontSize:Number(layer.fontSize)||96,fontWeight:Number(layer.fontWeight)||700,textAlign:String(layer.textAlign||'center'),lineHeight:Number(layer.lineHeight)||1.25,textArch:Math.max(-100,Math.min(100,Number(layer.textArch)||0)),textColor:normalizeHexColor(layer.textColor||'#ffffff'),textStrokeColor:normalizeHexColor(layer.textStrokeColor||'#000000'),textStrokeWidth:Number(layer.textStrokeWidth)||0,textShadowEnabled:layer.textShadowEnabled!==false,textShadowColor:normalizeHexColor(layer.textShadowColor||'#000000'),textShadowOpacity:Number.isFinite(Number(layer.textShadowOpacity))?Number(layer.textShadowOpacity):0.45,textShadowOffsetX:Number(layer.textShadowOffsetX)||0,textShadowOffsetY:Number(layer.textShadowOffsetY)||0,textShadowBlur:Number(layer.textShadowBlur)||0,textShadowSpread:Number.isFinite(Number(layer.textShadowSpread))?Math.max(0,Math.min(50,Number(layer.textShadowSpread))):0,imageFit:String(layer.imageFit||'stretch'),imageHue:Number(layer.imageHue)||0,imageBrightness:Number.isFinite(Number(layer.imageBrightness))?Number(layer.imageBrightness):100,imageContrast:Number.isFinite(Number(layer.imageContrast))?Number(layer.imageContrast):100,imageSaturation:Number.isFinite(Number(layer.imageSaturation))?Number(layer.imageSaturation):100,imageGrayscale:Number(layer.imageGrayscale)||0,imageSepia:Number(layer.imageSepia)||0,imageBlur:Number(layer.imageBlur)||0,imageSkewX:Number(layer.imageSkewX)||0,imageSkewY:Number(layer.imageSkewY)||0
   };
 }
 async function buildProjectData(includeAssets,includeImageDescriptions=false){
@@ -3451,7 +3551,7 @@ async function restoreProjectAssets(project){
 }
 function applyLoadedLayerData(raw,asset){
   const isText=String(raw.kind||'')==='text';
-  return {id:Number(raw.id)||nextLayerId++,name:String(raw.name||(isText?'テキスト':asset?.name||'レイヤー')),assetId:isText?null:(asset?.id ?? raw.assetId),kind:isText?'text':(asset?.kind||raw.kind||'static'),frames:isText?[]:(asset?.frames||[]),frameDurations:isText?[]:(asset?asset.frames.map(frame=>normalizeDelay(frame.duration)):(Array.isArray(raw.frameDurations)?raw.frameDurations.map(normalizeDelay):[])),totalDuration:isText?1000:(asset?.totalDuration||Number(raw.totalDuration)||1),sourceWidth:isText?Number(raw.sourceWidth)||Number(raw.w)||1:(asset?.width||Number(raw.sourceWidth)||1),sourceHeight:isText?Number(raw.sourceHeight)||Number(raw.h)||1:(asset?.height||Number(raw.sourceHeight)||1),x:Number(raw.x)||0,y:Number(raw.y)||0,w:Math.max(1,Number(raw.w)||1),h:Math.max(1,Number(raw.h)||1),baseW:Math.max(1,Number(raw.baseW)||Number(raw.w)||1),baseH:Math.max(1,Number(raw.baseH)||Number(raw.h)||1),rot:Number(raw.rot)||0,opacity:Number.isFinite(Number(raw.opacity))?Math.max(0,Math.min(1,Number(raw.opacity))):1,zoom:Number(raw.zoom)||100,visible:raw.visible!==false,text:String(raw.text??(isText?'テキスト':'')),fontFamily:String(raw.fontFamily||'Noto Sans JP'),fontSize:Math.max(8,Math.min(1000,Number(raw.fontSize)||96)),fontWeight:Number(raw.fontWeight)||700,textAlign:String(raw.textAlign||'center'),lineHeight:Math.max(.5,Math.min(3,Number(raw.lineHeight)||1.25)),textColor:normalizeHexColor(raw.textColor||'#ffffff'),textStrokeColor:normalizeHexColor(raw.textStrokeColor||'#000000'),textStrokeWidth:Math.max(0,Math.min(50,Number(raw.textStrokeWidth)||0)),textShadowEnabled:raw.textShadowEnabled===true,textShadowColor:normalizeHexColor(raw.textShadowColor||'#000000'),textShadowOpacity:Math.max(0,Math.min(1,Number.isFinite(Number(raw.textShadowOpacity))?Number(raw.textShadowOpacity):0.45)),textShadowOffsetX:Math.max(-100,Math.min(100,Number(raw.textShadowOffsetX)||0)),textShadowOffsetY:Math.max(-100,Math.min(100,Number(raw.textShadowOffsetY)||0)),textShadowBlur:Math.max(0,Math.min(100,Number(raw.textShadowBlur)||0)),textShadowSpread:Math.max(0,Math.min(50,Number.isFinite(Number(raw.textShadowSpread))?Number(raw.textShadowSpread):0)),imageFit:String(raw.imageFit||'stretch'),imageHue:Math.max(-180,Math.min(180,Number(raw.imageHue)||0)),imageBrightness:Math.max(0,Math.min(200,Number.isFinite(Number(raw.imageBrightness))?Number(raw.imageBrightness):100)),imageContrast:Math.max(0,Math.min(200,Number.isFinite(Number(raw.imageContrast))?Number(raw.imageContrast):100)),imageSaturation:Math.max(0,Math.min(200,Number.isFinite(Number(raw.imageSaturation))?Number(raw.imageSaturation):100)),imageGrayscale:Math.max(0,Math.min(100,Number(raw.imageGrayscale)||0)),imageSepia:Math.max(0,Math.min(100,Number(raw.imageSepia)||0)),imageBlur:Math.max(0,Math.min(30,Number(raw.imageBlur)||0)),imageSkewX:Math.max(-45,Math.min(45,Number(raw.imageSkewX)||0)),imageSkewY:Math.max(-45,Math.min(45,Number(raw.imageSkewY)||0)),inAnimType:raw.inAnimType||'none',inAnimDuration:Number(raw.inAnimDuration)||0.6,loopAnimType:raw.loopAnimType||'none',loopSpeed:Number(raw.loopSpeed)||1,loopIntensity:Math.max(0,Math.min(2,Number.isFinite(Number(raw.loopIntensity))?Number(raw.loopIntensity):Number(raw.animationIntensity)||1)),inAnimIntensity:Math.max(0,Math.min(2,Number.isFinite(Number(raw.inAnimIntensity))?Number(raw.inAnimIntensity):Number(raw.animationIntensity)||1)),exitAnimIntensity:Math.max(0,Math.min(2,Number.isFinite(Number(raw.exitAnimIntensity))?Number(raw.exitAnimIntensity):Number(raw.animationIntensity)||1)),animationIntensity:Math.max(0,Math.min(2,Number(raw.animationIntensity)||1)),startTime:Math.max(0,Math.min(30,Number(raw.startTime)||0)),exitAnimType:raw.exitAnimType||'none',endTime:(Number(raw.endTime)===0?0:Math.max(Math.max(0,Math.min(30,Number(raw.startTime)||0)),Math.min(30,Number.isFinite(Number(raw.endTime))?Number(raw.endTime):((Math.max(0,Math.min(30,Number(raw.startTime)||0)))+(asset?.frames?.length>1?Math.max(0.001,Number(asset.totalDuration)||0.001)/1000:1)))))};
+  return {id:Number(raw.id)||nextLayerId++,name:String(raw.name||(isText?'テキスト':asset?.name||'レイヤー')),assetId:isText?null:(asset?.id ?? raw.assetId),kind:isText?'text':(asset?.kind||raw.kind||'static'),frames:isText?[]:(asset?.frames||[]),frameDurations:isText?[]:(asset?asset.frames.map(frame=>normalizeDelay(frame.duration)):(Array.isArray(raw.frameDurations)?raw.frameDurations.map(normalizeDelay):[])),totalDuration:isText?1000:(asset?.totalDuration||Number(raw.totalDuration)||1),sourceWidth:isText?Number(raw.sourceWidth)||Number(raw.w)||1:(asset?.width||Number(raw.sourceWidth)||1),sourceHeight:isText?Number(raw.sourceHeight)||Number(raw.h)||1:(asset?.height||Number(raw.sourceHeight)||1),x:Number(raw.x)||0,y:Number(raw.y)||0,w:Math.max(1,Number(raw.w)||1),h:Math.max(1,Number(raw.h)||1),baseW:Math.max(1,Number(raw.baseW)||Number(raw.w)||1),baseH:Math.max(1,Number(raw.baseH)||Number(raw.h)||1),rot:Number(raw.rot)||0,opacity:Number.isFinite(Number(raw.opacity))?Math.max(0,Math.min(1,Number(raw.opacity))):1,zoom:Number(raw.zoom)||100,visible:raw.visible!==false,text:String(raw.text??(isText?'テキスト':'')),fontFamily:String(raw.fontFamily||'Noto Sans JP'),fontSize:Math.max(8,Math.min(1000,Number(raw.fontSize)||96)),fontWeight:Number(raw.fontWeight)||700,textAlign:String(raw.textAlign||'center'),lineHeight:Math.max(.5,Math.min(3,Number(raw.lineHeight)||1.25)),textArch:Math.max(-100,Math.min(100,Number(raw.textArch)||0)),textColor:normalizeHexColor(raw.textColor||'#ffffff'),textStrokeColor:normalizeHexColor(raw.textStrokeColor||'#000000'),textStrokeWidth:Math.max(0,Math.min(50,Number(raw.textStrokeWidth)||0)),textShadowEnabled:raw.textShadowEnabled===true,textShadowColor:normalizeHexColor(raw.textShadowColor||'#000000'),textShadowOpacity:Math.max(0,Math.min(1,Number.isFinite(Number(raw.textShadowOpacity))?Number(raw.textShadowOpacity):0.45)),textShadowOffsetX:Math.max(-100,Math.min(100,Number(raw.textShadowOffsetX)||0)),textShadowOffsetY:Math.max(-100,Math.min(100,Number(raw.textShadowOffsetY)||0)),textShadowBlur:Math.max(0,Math.min(100,Number(raw.textShadowBlur)||0)),textShadowSpread:Math.max(0,Math.min(50,Number.isFinite(Number(raw.textShadowSpread))?Number(raw.textShadowSpread):0)),imageFit:String(raw.imageFit||'stretch'),imageHue:Math.max(-180,Math.min(180,Number(raw.imageHue)||0)),imageBrightness:Math.max(0,Math.min(200,Number.isFinite(Number(raw.imageBrightness))?Number(raw.imageBrightness):100)),imageContrast:Math.max(0,Math.min(200,Number.isFinite(Number(raw.imageContrast))?Number(raw.imageContrast):100)),imageSaturation:Math.max(0,Math.min(200,Number.isFinite(Number(raw.imageSaturation))?Number(raw.imageSaturation):100)),imageGrayscale:Math.max(0,Math.min(100,Number(raw.imageGrayscale)||0)),imageSepia:Math.max(0,Math.min(100,Number(raw.imageSepia)||0)),imageBlur:Math.max(0,Math.min(30,Number(raw.imageBlur)||0)),imageSkewX:Math.max(-45,Math.min(45,Number(raw.imageSkewX)||0)),imageSkewY:Math.max(-45,Math.min(45,Number(raw.imageSkewY)||0)),inAnimType:raw.inAnimType||'none',inAnimDuration:Number(raw.inAnimDuration)||0.6,loopAnimType:raw.loopAnimType||'none',loopSpeed:Number(raw.loopSpeed)||1,loopIntensity:Math.max(0,Math.min(2,Number.isFinite(Number(raw.loopIntensity))?Number(raw.loopIntensity):Number(raw.animationIntensity)||1)),inAnimIntensity:Math.max(0,Math.min(2,Number.isFinite(Number(raw.inAnimIntensity))?Number(raw.inAnimIntensity):Number(raw.animationIntensity)||1)),exitAnimIntensity:Math.max(0,Math.min(2,Number.isFinite(Number(raw.exitAnimIntensity))?Number(raw.exitAnimIntensity):Number(raw.animationIntensity)||1)),animationIntensity:Math.max(0,Math.min(2,Number(raw.animationIntensity)||1)),startTime:Math.max(0,Math.min(30,Number(raw.startTime)||0)),exitAnimType:raw.exitAnimType||'none',endTime:(Number(raw.endTime)===0?0:Math.max(Math.max(0,Math.min(30,Number(raw.startTime)||0)),Math.min(30,Number.isFinite(Number(raw.endTime))?Number(raw.endTime):((Math.max(0,Math.min(30,Number(raw.startTime)||0)))+(asset?.frames?.length>1?Math.max(0.001,Number(asset.totalDuration)||0.001)/1000:1)))))};
 }
 async function loadProjectData(file){
   els.projectDataStatus.textContent='作業データを読み込み中…';
@@ -3609,6 +3709,7 @@ els.themeToggle.addEventListener('click',()=>{
         '・縁取り',
         '・配置',
         '・行数',
+        '・アーチ（-100〜100%。0は通常の直線。正負でアーチ方向を調整）',
         '・他要素との距離',
         '・スマートフォン等で小さく表示したときの視認性',
         '',
